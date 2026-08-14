@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bufio"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -14,11 +16,35 @@ type Config struct {
 	AdminUserID   int64
 }
 
-func Load() *Config {
-	token := os.Getenv("BOT_TOKEN")
-	if token == "" {
-		token = "8885263927:AAExdabNfuKcrr9hG44-B_8Rf5mXv64i-xo"
+// loadDotEnv reads .env file if present in working directory
+func loadDotEnv() {
+	file, err := os.Open(".env")
+	if err != nil {
+		return
 	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			if os.Getenv(key) == "" {
+				_ = os.Setenv(key, val)
+			}
+		}
+	}
+}
+
+func Load() *Config {
+	loadDotEnv()
+
+	token := os.Getenv("BOT_TOKEN")
 
 	tempDir := os.Getenv("TEMP_DIR")
 	if tempDir == "" {

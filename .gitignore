@@ -2,3 +2,5 @@ ilovepdf_bot
 *.tmp
 *.log
 /tmp/
+.env
+data/
