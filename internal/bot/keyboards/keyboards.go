@@ -47,6 +47,7 @@ func MainMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 		txtOrganize = "🗂 Организовать"
 		txtHTML2PDF = "🌐 HTML в PDF"
 		txtOCR = "🔍 OCR Распознавание"
+		txtLang = "🌐 Язык / Language"
 	} else if lang == "uz" {
 		txtMerge = "🧩 PDF Birlashtirish"
 		txtSplit = "✂️ PDF Ajratish"
@@ -65,6 +66,7 @@ func MainMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 		txtOrganize = "🗂 Tartiblash"
 		txtHTML2PDF = "🌐 Web -> PDF"
 		txtOCR = "🔍 OCR Matn"
+		txtLang = "🌐 Tilni O'zgartirish"
 	}
 
 	return gotgbot.InlineKeyboardMarkup{
@@ -222,11 +224,8 @@ func LanguageKeyboard() gotgbot.InlineKeyboardMarkup {
 		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
 			{
 				{Text: "🇺🇿 O'zbekcha", CallbackData: "lang:uz"},
-				{Text: "🇬🇧 English", CallbackData: "lang:en"},
 				{Text: "🇷🇺 Русский", CallbackData: "lang:ru"},
-			},
-			{
-				{Text: "🔙 Bosh menyu", CallbackData: "nav:main"},
+				{Text: "🇬🇧 English", CallbackData: "lang:en"},
 			},
 		},
 	}

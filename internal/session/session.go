@@ -50,14 +50,15 @@ type FileMeta struct {
 }
 
 type UserSession struct {
-	UserID         int64
-	State          State
-	Language       string // "uz", "en", "ru"
-	Files          []FileMeta
-	Metadata       map[string]string
-	TempMessageIDs []int64
-	SessionDir     string
-	LastActive     time.Time
+	UserID           int64
+	State            State
+	Language         string // "uz", "en", "ru"
+	LanguageSelected bool   // true if user picked language
+	Files            []FileMeta
+	Metadata         map[string]string
+	TempMessageIDs   []int64
+	SessionDir       string
+	LastActive       time.Time
 }
 
 type Manager struct {
@@ -85,14 +86,15 @@ func (m *Manager) Get(userID int64) *UserSession {
 		_ = os.MkdirAll(sessDir, 0755)
 
 		sess = &UserSession{
-			UserID:         userID,
-			State:          StateIdle,
-			Language:       "uz",
-			Files:          make([]FileMeta, 0),
-			Metadata:       make(map[string]string),
-			TempMessageIDs: make([]int64, 0),
-			SessionDir:     sessDir,
-			LastActive:     time.Now(),
+			UserID:           userID,
+			State:            StateIdle,
+			Language:         "uz",
+			LanguageSelected: false,
+			Files:            make([]FileMeta, 0),
+			Metadata:         make(map[string]string),
+			TempMessageIDs:   make([]int64, 0),
+			SessionDir:       sessDir,
+			LastActive:       time.Now(),
 		}
 		m.sessions[userID] = sess
 	} else {
@@ -108,8 +110,24 @@ func (m *Manager) Reset(userID int64) {
 
 	sess, exists := m.sessions[userID]
 	if exists {
+		lang := sess.Language
+		langSelected := sess.LanguageSelected
 		_ = os.RemoveAll(sess.SessionDir)
-		delete(m.sessions, userID)
+
+		sessDir := filepath.Join(m.baseDir, fmt.Sprintf("%d_%d", userID, time.Now().UnixNano()))
+		_ = os.MkdirAll(sessDir, 0755)
+
+		m.sessions[userID] = &UserSession{
+			UserID:           userID,
+			State:            StateIdle,
+			Language:         lang,
+			LanguageSelected: langSelected,
+			Files:            make([]FileMeta, 0),
+			Metadata:         make(map[string]string),
+			TempMessageIDs:   make([]int64, 0),
+			SessionDir:       sessDir,
+			LastActive:       time.Now(),
+		}
 	}
 }
 
@@ -125,6 +143,7 @@ func (m *Manager) SetLanguage(userID int64, lang string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	sess.Language = lang
+	sess.LanguageSelected = true
 }
 
 func (m *Manager) AddFile(userID int64, file FileMeta) {

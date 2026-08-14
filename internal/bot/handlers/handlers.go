@@ -73,14 +73,50 @@ func (h *BotHandlers) EditMessage(b *gotgbot.Bot, chatID int64, messageID int64,
 func (h *BotHandlers) HandleStart(b *gotgbot.Bot, ctx *ext.Context) error {
 	userID := ctx.EffectiveUser.Id
 	h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
-	h.sm.Reset(userID)
 	sess := h.sm.Get(userID)
 
-	msgText := "✨ **iLovePDF Telegram Botiga xush kelibsiz!**\n\nPDF fayllaringiz bilan ishlash uchun quyidagi kategoriyalardan birini tanlang:"
+	// Step 1: If user hasn't selected language yet, present Language Selection immediately
+	if !sess.LanguageSelected {
+		langPrompt := "🌐 **Iltimos, muloqot tilini tanlang:**\n🌐 **Пожалуйста, выберите язык:**\n🌐 **Please select your language:**"
+		kb := keyboards.LanguageKeyboard()
+
+		if ctx.CallbackQuery != nil {
+			_, _ = ctx.CallbackQuery.Answer(b, nil)
+			_, err := h.EditMessage(b, ctx.EffectiveChat.Id, ctx.EffectiveMessage.MessageId, langPrompt, &kb)
+			if err == nil {
+				return nil
+			}
+		}
+
+		bannerPath := "assets/banner.png"
+		if f, err := os.Open(bannerPath); err == nil {
+			defer f.Close()
+			_, sendErr := b.SendPhoto(ctx.EffectiveChat.Id, gotgbot.InputFileByReader("banner.png", f), &gotgbot.SendPhotoOpts{
+				Caption:     langPrompt,
+				ParseMode:   "Markdown",
+				ReplyMarkup: kb,
+			})
+			if sendErr == nil {
+				return nil
+			}
+		}
+
+		_, err := b.SendMessage(ctx.EffectiveChat.Id, langPrompt, &gotgbot.SendMessageOpts{
+			ParseMode:   "Markdown",
+			ReplyMarkup: kb,
+		})
+		return err
+	}
+
+	// Step 2: Language is selected -> Present Main Menu in chosen language
+	h.sm.Reset(userID)
+	sess = h.sm.Get(userID)
+
+	msgText := "✨ **iLovePDF Bot** — Kerakli bo'limni tanlang:"
 	if sess.Language == "ru" {
-		msgText = "✨ **Добро пожаловать в iLovePDF Telegram Bot!**\n\nВыберите нужную функцию для работы с PDF:"
+		msgText = "✨ **iLovePDF Bot** — Выберите нужный раздел:"
 	} else if sess.Language == "en" {
-		msgText = "✨ **Welcome to iLovePDF Telegram Bot!**\n\nSelect a tool below to process your PDF files:"
+		msgText = "✨ **iLovePDF Bot** — Select a tool below:"
 	}
 
 	kb := keyboards.MainMenuKeyboard(sess.Language)
@@ -93,7 +129,6 @@ func (h *BotHandlers) HandleStart(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	}
 
-	// Send banner photo if available
 	bannerPath := "assets/banner.png"
 	if f, err := os.Open(bannerPath); err == nil {
 		defer f.Close()
@@ -145,13 +180,10 @@ func (h *BotHandlers) HandleCancel(b *gotgbot.Bot, ctx *ext.Context) error {
 
 // HandleLangNav handles language menu
 func (h *BotHandlers) HandleLangNav(b *gotgbot.Bot, ctx *ext.Context) error {
-	if ctx.CallbackQuery != nil {
-		_, _ = ctx.CallbackQuery.Answer(b, nil)
-		kb := keyboards.LanguageKeyboard()
-		_, err := h.EditMessage(b, ctx.EffectiveChat.Id, ctx.EffectiveMessage.MessageId, "🌐 **Tilni tanlang / Select Language:**", &kb)
-		return err
-	}
-	return nil
+	userID := ctx.EffectiveUser.Id
+	sess := h.sm.Get(userID)
+	sess.LanguageSelected = false // Reset selection to prompt language choice
+	return h.HandleStart(b, ctx)
 }
 
 // HandleLangSelect updates user language
