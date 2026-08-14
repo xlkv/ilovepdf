@@ -31,6 +31,16 @@ func NewBotHandlers(cfg *config.Config, sm *session.Manager, pdfcpu *engine.PDFC
 	}
 }
 
+// ClearOldMessages deletes all temporary accumulated messages for clean UI
+func (h *BotHandlers) ClearOldMessages(b *gotgbot.Bot, chatID int64, userID int64) {
+	msgIDs := h.sm.PopTempMsgs(userID)
+	for _, id := range msgIDs {
+		if id > 0 {
+			_, _ = b.DeleteMessage(chatID, id, nil)
+		}
+	}
+}
+
 // EditMessage is a helper to safely edit Telegram messages
 func (h *BotHandlers) EditMessage(b *gotgbot.Bot, chatID int64, messageID int64, text string, replyMarkup *gotgbot.InlineKeyboardMarkup) (*gotgbot.Message, error) {
 	opts := &gotgbot.EditMessageTextOpts{
@@ -49,14 +59,15 @@ func (h *BotHandlers) EditMessage(b *gotgbot.Bot, chatID int64, messageID int64,
 // HandleStart responds to /start or main menu callback
 func (h *BotHandlers) HandleStart(b *gotgbot.Bot, ctx *ext.Context) error {
 	userID := ctx.EffectiveUser.Id
+	h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 	h.sm.Reset(userID)
 	sess := h.sm.Get(userID)
 
-	msgText := "👋 **iLovePDF Telegram Botiga xush kelibsiz!**\n\nQuyidagi tugmalardan birini tanlang:"
+	msgText := "✨ **iLovePDF Telegram Botiga xush kelibsiz!**\n\nPDF fayllaringiz bilan ishlash uchun quyidagi kategoriyalardan birini tanlang:"
 	if sess.Language == "ru" {
-		msgText = "👋 **Добро пожаловать в iLovePDF Telegram Bot!**\n\nВыберите нужную функцию:"
+		msgText = "✨ **Добро пожаловать в iLovePDF Telegram Bot!**\n\nВыберите нужную функцию для работы с PDF:"
 	} else if sess.Language == "en" {
-		msgText = "👋 **Welcome to iLovePDF Telegram Bot!**\n\nSelect a tool below:"
+		msgText = "✨ **Welcome to iLovePDF Telegram Bot!**\n\nSelect a tool below to process your PDF files:"
 	}
 
 	kb := keyboards.MainMenuKeyboard(sess.Language)
@@ -65,6 +76,20 @@ func (h *BotHandlers) HandleStart(b *gotgbot.Bot, ctx *ext.Context) error {
 		_, _ = ctx.CallbackQuery.Answer(b, nil)
 		_, err := h.EditMessage(b, ctx.EffectiveChat.Id, ctx.EffectiveMessage.MessageId, msgText, &kb)
 		if err == nil {
+			return nil
+		}
+	}
+
+	// Send banner photo if available
+	bannerPath := "assets/banner.png"
+	if f, err := os.Open(bannerPath); err == nil {
+		defer f.Close()
+		_, sendErr := b.SendPhoto(ctx.EffectiveChat.Id, gotgbot.InputFileByReader("banner.png", f), &gotgbot.SendPhotoOpts{
+			Caption:     msgText,
+			ParseMode:   "Markdown",
+			ReplyMarkup: kb,
+		})
+		if sendErr == nil {
 			return nil
 		}
 	}
@@ -79,6 +104,7 @@ func (h *BotHandlers) HandleStart(b *gotgbot.Bot, ctx *ext.Context) error {
 // HandleCancel handles cancellation
 func (h *BotHandlers) HandleCancel(b *gotgbot.Bot, ctx *ext.Context) error {
 	userID := ctx.EffectiveUser.Id
+	h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 	h.sm.Reset(userID)
 	sess := h.sm.Get(userID)
 

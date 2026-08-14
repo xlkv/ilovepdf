@@ -18,6 +18,7 @@ import (
 // HandleToolSelect responds when user clicks a tool from main menu
 func (h *BotHandlers) HandleToolSelect(b *gotgbot.Bot, ctx *ext.Context, toolID string) error {
 	userID := ctx.EffectiveUser.Id
+	h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 	h.sm.Reset(userID)
 
 	if ctx.CallbackQuery != nil {
@@ -30,7 +31,7 @@ func (h *BotHandlers) HandleToolSelect(b *gotgbot.Bot, ctx *ext.Context, toolID 
 	switch toolID {
 	case "merge":
 		newState = session.StateMergeUploading
-		prompt = "🧩 **PDF Birlashtirish:**\n\nBirlashtirmoqchi bo'lgan 2 yoki undan ortiq PDF fayllarni birin-ketin yuboring."
+		prompt = "🧩 **PDF Birlashtirish:**\n\nBirlashtirmoqchi bo'lgan 2 yoki undan ortiq PDF (yoki Word/Office) fayllaringizni birin-ketin yuboring."
 	case "split":
 		newState = session.StateSplitAwaitFile
 		prompt = "✂️ **PDF Ajratish:**\n\nAjratmoqchi bo'lgan PDF faylingizni yuboring."
@@ -87,14 +88,20 @@ func (h *BotHandlers) HandleToolSelect(b *gotgbot.Bot, ctx *ext.Context, toolID 
 	kb := keyboards.CancelKeyboard()
 
 	if ctx.CallbackQuery != nil {
-		_, err := h.EditMessage(b, ctx.EffectiveChat.Id, ctx.EffectiveMessage.MessageId, prompt, &kb)
+		msg, err := h.EditMessage(b, ctx.EffectiveChat.Id, ctx.EffectiveMessage.MessageId, prompt, &kb)
+		if msg != nil {
+			h.sm.AddTempMsg(userID, msg.MessageId)
+		}
 		return err
 	}
 
-	_, err := b.SendMessage(ctx.EffectiveChat.Id, prompt, &gotgbot.SendMessageOpts{
+	msg, err := b.SendMessage(ctx.EffectiveChat.Id, prompt, &gotgbot.SendMessageOpts{
 		ParseMode:   "Markdown",
 		ReplyMarkup: kb,
 	})
+	if msg != nil {
+		h.sm.AddTempMsg(userID, msg.MessageId)
+	}
 	return err
 }
 
@@ -106,23 +113,44 @@ func (h *BotHandlers) HandleDocumentUpload(b *gotgbot.Bot, ctx *ext.Context) err
 	}
 
 	userID := ctx.EffectiveUser.Id
+	h.sm.AddTempMsg(userID, ctx.EffectiveMessage.MessageId)
 	sess := h.sm.Get(userID)
 
 	if sess.State == session.StateIdle {
 		kb := keyboards.MainMenuKeyboard(sess.Language)
-		_, err := b.SendMessage(ctx.EffectiveChat.Id, "ℹ️ Iltimos, avval menyudan kerakli funksiyani tanlang:", &gotgbot.SendMessageOpts{
+		msg, err := b.SendMessage(ctx.EffectiveChat.Id, "ℹ️ Iltimos, avval menyudan kerakli funksiyani tanlang:", &gotgbot.SendMessageOpts{
 			ReplyMarkup: kb,
 		})
+		if msg != nil {
+			h.sm.AddTempMsg(userID, msg.MessageId)
+		}
 		return err
 	}
 
 	destPath := filepath.Join(sess.SessionDir, fmt.Sprintf("%d_%s", len(sess.Files)+1, doc.FileName))
 	statusMsg, _ := b.SendMessage(ctx.EffectiveChat.Id, "⏳ Fayl yuklab olinmoqda...", nil)
+	if statusMsg != nil {
+		h.sm.AddTempMsg(userID, statusMsg.MessageId)
+	}
 
 	err := h.DownloadTelegramFile(b, doc.FileId, destPath)
 	if err != nil {
 		_, _ = h.EditMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId, fmt.Sprintf("❌ Faylni yuklab olishda xatolik: %v", err), nil)
 		return err
+	}
+
+	// Auto-convert Office files to PDF if uploaded in Merge mode
+	extLower := strings.ToLower(filepath.Ext(destPath))
+	if sess.State == session.StateMergeUploading && (extLower == ".doc" || extLower == ".docx" || extLower == ".pptx" || extLower == ".xlsx") {
+		outPDF, convErr := h.convertEng.ConvertOfficeToPDF(destPath, sess.SessionDir)
+		if convErr == nil && outPDF != "" {
+			destPath = outPDF
+			doc.FileName = filepath.Base(outPDF)
+			fi, _ := os.Stat(outPDF)
+			if fi != nil {
+				doc.FileSize = fi.Size()
+			}
+		}
 	}
 
 	fileMeta := session.FileMeta{
@@ -176,7 +204,8 @@ func (h *BotHandlers) HandleDocumentUpload(b *gotgbot.Bot, ctx *ext.Context) err
 	case session.StateWord2PDFAwaitFile, session.StatePPT2PDFAwaitFile, session.StateExcel2PDFAwaitFile:
 		_, _ = h.EditMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId, "⏳ Hujjat PDF ga o'girilmoqda...", nil)
 		outPDF, err := h.convertEng.ConvertOfficeToPDF(destPath, sess.SessionDir)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
+
 		if err != nil {
 			_, _ = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ O'girishda xatolik: %v", err), nil)
 			return err
@@ -189,7 +218,8 @@ func (h *BotHandlers) HandleDocumentUpload(b *gotgbot.Bot, ctx *ext.Context) err
 		_, _ = h.EditMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId, "⏳ PDF Word (DOCX) ga o'girilmoqda...", nil)
 		outDocx := filepath.Join(sess.SessionDir, strings.TrimSuffix(doc.FileName, ".pdf")+".docx")
 		err := h.convertEng.ConvertPDFToWord(destPath, outDocx)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
+
 		if err != nil {
 			_, _ = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ O'girishda xatolik: %v", err), nil)
 			return err
@@ -203,7 +233,8 @@ func (h *BotHandlers) HandleDocumentUpload(b *gotgbot.Bot, ctx *ext.Context) err
 		imgDir := filepath.Join(sess.SessionDir, "images")
 		_ = os.MkdirAll(imgDir, 0755)
 		imgs, err := h.convertEng.ConvertPDFToImages(destPath, imgDir)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
+
 		if err != nil || len(imgs) == 0 {
 			_, _ = b.SendMessage(ctx.EffectiveChat.Id, "❌ Rasmlarga ajratishda xatolik yuz berdi.", nil)
 			return err
@@ -243,7 +274,8 @@ func (h *BotHandlers) HandleDocumentUpload(b *gotgbot.Bot, ctx *ext.Context) err
 		_, _ = h.EditMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId, "⏳ Sahifa raqamlari qo'shilmoqda...", nil)
 		outPDF := filepath.Join(sess.SessionDir, "numbered.pdf")
 		err := h.pdfcpuEng.AddPageNumbers(destPath, outPDF)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
+
 		if err != nil {
 			_, _ = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ Raqamlashda xatolik: %v", err), nil)
 			return err
@@ -264,7 +296,8 @@ func (h *BotHandlers) HandleDocumentUpload(b *gotgbot.Bot, ctx *ext.Context) err
 		_, _ = h.EditMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId, "🔍 OCR qilinmoqda, kuting...", nil)
 		outPDF := filepath.Join(sess.SessionDir, "ocr_searchable.pdf")
 		err := h.convertEng.OCRPDF(destPath, outPDF, "eng")
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
+
 		if err != nil {
 			_, _ = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ OCR xatolik: %v", err), nil)
 			return err
@@ -285,6 +318,7 @@ func (h *BotHandlers) HandlePhotoUpload(b *gotgbot.Bot, ctx *ext.Context) error 
 	}
 
 	userID := ctx.EffectiveUser.Id
+	h.sm.AddTempMsg(userID, ctx.EffectiveMessage.MessageId)
 	sess := h.sm.Get(userID)
 
 	if sess.State != session.StateJPG2PDFUploading {
@@ -309,10 +343,13 @@ func (h *BotHandlers) HandlePhotoUpload(b *gotgbot.Bot, ctx *ext.Context) error 
 	files := h.sm.Get(userID).Files
 	msgText := fmt.Sprintf("📷 **Qabul qilingan rasmlar (%d):**\n\nYana rasm yuborishingiz yoki PDF ga o'girish tugmasini bosishingiz mumkin.", len(files))
 	kb := keyboards.JPG2PDFKeyboard(len(files))
-	_, err = b.SendMessage(ctx.EffectiveChat.Id, msgText, &gotgbot.SendMessageOpts{
+	msg, err := b.SendMessage(ctx.EffectiveChat.Id, msgText, &gotgbot.SendMessageOpts{
 		ParseMode:   "Markdown",
 		ReplyMarkup: kb,
 	})
+	if msg != nil {
+		h.sm.AddTempMsg(userID, msg.MessageId)
+	}
 	return err
 }
 
@@ -324,6 +361,7 @@ func (h *BotHandlers) HandleTextMessage(b *gotgbot.Bot, ctx *ext.Context) error 
 	}
 
 	userID := ctx.EffectiveUser.Id
+	h.sm.AddTempMsg(userID, ctx.EffectiveMessage.MessageId)
 	sess := h.sm.Get(userID)
 
 	switch sess.State {
@@ -336,9 +374,12 @@ func (h *BotHandlers) HandleTextMessage(b *gotgbot.Bot, ctx *ext.Context) error 
 		_ = os.MkdirAll(outDir, 0755)
 
 		statusMsg, _ := b.SendMessage(ctx.EffectiveChat.Id, "⏳ Sahifalar ajratilmoqda...", nil)
+		if statusMsg != nil {
+			h.sm.AddTempMsg(userID, statusMsg.MessageId)
+		}
 		pages := engine.ParsePageRange(text)
 		outFiles, err := h.pdfcpuEng.SplitPDF(inFile, outDir, pages)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 
 		if err != nil || len(outFiles) == 0 {
 			_, err = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ Ajratishda xatolik: %v", err), nil)
@@ -362,8 +403,11 @@ func (h *BotHandlers) HandleTextMessage(b *gotgbot.Bot, ctx *ext.Context) error 
 		inFile := sess.Files[0].Path
 		outFile := filepath.Join(sess.SessionDir, "protected.pdf")
 		statusMsg, _ := b.SendMessage(ctx.EffectiveChat.Id, "🔒 PDF qulflanmoqda...", nil)
+		if statusMsg != nil {
+			h.sm.AddTempMsg(userID, statusMsg.MessageId)
+		}
 		err := h.pdfcpuEng.EncryptPDF(inFile, outFile, text)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 
 		if err != nil {
 			_, err = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ Parol o'rnatishda xatolik: %v", err), nil)
@@ -380,8 +424,11 @@ func (h *BotHandlers) HandleTextMessage(b *gotgbot.Bot, ctx *ext.Context) error 
 		inFile := sess.Files[0].Path
 		outFile := filepath.Join(sess.SessionDir, "unlocked.pdf")
 		statusMsg, _ := b.SendMessage(ctx.EffectiveChat.Id, "🔓 PDF dan parol olib tashlanmoqda...", nil)
+		if statusMsg != nil {
+			h.sm.AddTempMsg(userID, statusMsg.MessageId)
+		}
 		err := h.pdfcpuEng.DecryptPDF(inFile, outFile, text)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 
 		if err != nil {
 			_, err = b.SendMessage(ctx.EffectiveChat.Id, "❌ Parol noto'g'ri yoki xatolik yuz berdi.", nil)
@@ -398,8 +445,11 @@ func (h *BotHandlers) HandleTextMessage(b *gotgbot.Bot, ctx *ext.Context) error 
 		inFile := sess.Files[0].Path
 		outFile := filepath.Join(sess.SessionDir, "watermarked.pdf")
 		statusMsg, _ := b.SendMessage(ctx.EffectiveChat.Id, "🏷 Watermark qo'shilmoqda...", nil)
+		if statusMsg != nil {
+			h.sm.AddTempMsg(userID, statusMsg.MessageId)
+		}
 		err := h.pdfcpuEng.WatermarkPDF(inFile, outFile, text)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 
 		if err != nil {
 			_, err = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ Watermark qo'shishda xatolik: %v", err), nil)
@@ -416,9 +466,12 @@ func (h *BotHandlers) HandleTextMessage(b *gotgbot.Bot, ctx *ext.Context) error 
 		inFile := sess.Files[0].Path
 		outFile := filepath.Join(sess.SessionDir, "organized.pdf")
 		statusMsg, _ := b.SendMessage(ctx.EffectiveChat.Id, "🗂 PDF sahifalari tartiblanmoqda...", nil)
+		if statusMsg != nil {
+			h.sm.AddTempMsg(userID, statusMsg.MessageId)
+		}
 		pages := engine.ParsePageRange(text)
 		err := h.pdfcpuEng.OrganizePDF(inFile, outFile, pages)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 
 		if err != nil {
 			_, err = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ Tartiblashda xatolik: %v", err), nil)
@@ -431,8 +484,11 @@ func (h *BotHandlers) HandleTextMessage(b *gotgbot.Bot, ctx *ext.Context) error 
 	case session.StateHTML2PDFAwaitInput:
 		outFile := filepath.Join(sess.SessionDir, "webpage.pdf")
 		statusMsg, _ := b.SendMessage(ctx.EffectiveChat.Id, "⏳ Veb-sahifa PDF ga o'girilmoqda...", nil)
+		if statusMsg != nil {
+			h.sm.AddTempMsg(userID, statusMsg.MessageId)
+		}
 		err := h.convertEng.HTMLToPDF(text, outFile)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 
 		if err != nil {
 			_, _ = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ O'girishda xatolik: %v", err), nil)
@@ -465,8 +521,11 @@ func (h *BotHandlers) HandleCallbackActions(b *gotgbot.Bot, ctx *ext.Context, da
 		}
 		outFile := filepath.Join(sess.SessionDir, "merged.pdf")
 		statusMsg, _ := b.SendMessage(ctx.EffectiveChat.Id, "⏳ PDF fayllar birlashtirilmoqda...", nil)
+		if statusMsg != nil {
+			h.sm.AddTempMsg(userID, statusMsg.MessageId)
+		}
 		err := h.pdfcpuEng.MergePDFs(paths, outFile)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 
 		if err != nil {
 			_, _ = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ Birlashtirishda xatolik: %v", err), nil)
@@ -486,8 +545,11 @@ func (h *BotHandlers) HandleCallbackActions(b *gotgbot.Bot, ctx *ext.Context, da
 		}
 		outFile := filepath.Join(sess.SessionDir, "images_combined.pdf")
 		statusMsg, _ := b.SendMessage(ctx.EffectiveChat.Id, "⏳ Rasmlar PDF ga o'girilmoqda...", nil)
+		if statusMsg != nil {
+			h.sm.AddTempMsg(userID, statusMsg.MessageId)
+		}
 		err := h.pdfcpuEng.ImagesToPDF(paths, outFile)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 
 		if err != nil {
 			_, _ = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ PDF ga o'girishda xatolik: %v", err), nil)
@@ -505,8 +567,11 @@ func (h *BotHandlers) HandleCallbackActions(b *gotgbot.Bot, ctx *ext.Context, da
 		inFile := sess.Files[0].Path
 		outFile := filepath.Join(sess.SessionDir, "compressed.pdf")
 		statusMsg, _ := b.SendMessage(ctx.EffectiveChat.Id, "⏳ PDF siqilmoqda...", nil)
+		if statusMsg != nil {
+			h.sm.AddTempMsg(userID, statusMsg.MessageId)
+		}
 		err := h.convertEng.CompressPDF(inFile, outFile, level)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 
 		if err != nil {
 			_, _ = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ Siqishda xatolik: %v", err), nil)
@@ -529,8 +594,11 @@ func (h *BotHandlers) HandleCallbackActions(b *gotgbot.Bot, ctx *ext.Context, da
 		inFile := sess.Files[0].Path
 		outFile := filepath.Join(sess.SessionDir, "rotated.pdf")
 		statusMsg, _ := b.SendMessage(ctx.EffectiveChat.Id, "⏳ PDF burilmoqda...", nil)
+		if statusMsg != nil {
+			h.sm.AddTempMsg(userID, statusMsg.MessageId)
+		}
 		err := h.pdfcpuEng.RotatePDF(inFile, outFile, angle)
-		_ = deleteMessage(b, ctx.EffectiveChat.Id, statusMsg.MessageId)
+		h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 
 		if err != nil {
 			_, _ = b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("❌ Burishda xatolik: %v", err), nil)
@@ -542,14 +610,6 @@ func (h *BotHandlers) HandleCallbackActions(b *gotgbot.Bot, ctx *ext.Context, da
 	}
 
 	return nil
-}
-
-func deleteMessage(b *gotgbot.Bot, chatID, msgID int64) bool {
-	if msgID <= 0 {
-		return false
-	}
-	ok, _ := b.DeleteMessage(chatID, msgID, nil)
-	return ok
 }
 
 // Zip helper

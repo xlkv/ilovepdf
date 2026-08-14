@@ -11,34 +11,34 @@ import (
 type State string
 
 const (
-	StateIdle             State = "IDLE"
-	StateMergeUploading   State = "MERGE_UPLOADING"
-	StateSplitAwaitFile   State = "SPLIT_AWAIT_FILE"
-	StateSplitAwaitRange  State = "SPLIT_AWAIT_RANGE"
-	StateCompressAwaitFile State = "COMPRESS_AWAIT_FILE"
+	StateIdle               State = "IDLE"
+	StateMergeUploading     State = "MERGE_UPLOADING"
+	StateSplitAwaitFile     State = "SPLIT_AWAIT_FILE"
+	StateSplitAwaitRange    State = "SPLIT_AWAIT_RANGE"
+	StateCompressAwaitFile  State = "COMPRESS_AWAIT_FILE"
 	StateCompressAwaitLevel State = "COMPRESS_AWAIT_LEVEL"
-	StateWord2PDFAwaitFile State = "WORD2PDF_AWAIT_FILE"
-	StatePPT2PDFAwaitFile  State = "PPT2PDF_AWAIT_FILE"
+	StateWord2PDFAwaitFile  State = "WORD2PDF_AWAIT_FILE"
+	StatePPT2PDFAwaitFile   State = "PPT2PDF_AWAIT_FILE"
 	StateExcel2PDFAwaitFile State = "EXCEL2PDF_AWAIT_FILE"
-	StatePDF2WordAwaitFile State = "PDF2WORD_AWAIT_FILE"
-	StatePDF2JPGAwaitFile  State = "PDF2JPG_AWAIT_FILE"
-	StatePDF2JPGAwaitMode  State = "PDF2JPG_AWAIT_MODE"
-	StateJPG2PDFUploading State = "JPG2PDF_UPLOADING"
-	StateRotateAwaitFile   State = "ROTATE_AWAIT_FILE"
-	StateRotateAwaitAngle  State = "ROTATE_AWAIT_ANGLE"
-	StateProtectAwaitFile  State = "PROTECT_AWAIT_FILE"
-	StateProtectAwaitPass  State = "PROTECT_AWAIT_PASS"
-	StateUnlockAwaitFile   State = "UNLOCK_AWAIT_FILE"
-	StateUnlockAwaitPass   State = "UNLOCK_AWAIT_PASS"
+	StatePDF2WordAwaitFile  State = "PDF2WORD_AWAIT_FILE"
+	StatePDF2JPGAwaitFile   State = "PDF2JPG_AWAIT_FILE"
+	StatePDF2JPGAwaitMode   State = "PDF2JPG_AWAIT_MODE"
+	StateJPG2PDFUploading   State = "JPG2PDF_UPLOADING"
+	StateRotateAwaitFile    State = "ROTATE_AWAIT_FILE"
+	StateRotateAwaitAngle   State = "ROTATE_AWAIT_ANGLE"
+	StateProtectAwaitFile   State = "PROTECT_AWAIT_FILE"
+	StateProtectAwaitPass   State = "PROTECT_AWAIT_PASS"
+	StateUnlockAwaitFile    State = "UNLOCK_AWAIT_FILE"
+	StateUnlockAwaitPass    State = "UNLOCK_AWAIT_PASS"
 	StateWatermarkAwaitFile State = "WATERMARK_AWAIT_FILE"
 	StateWatermarkAwaitText State = "WATERMARK_AWAIT_TEXT"
-	StatePagenumAwaitFile  State = "PAGENUM_AWAIT_FILE"
-	StatePagenumAwaitPos   State = "PAGENUM_AWAIT_POS"
-	StateOrganizeAwaitFile State = "ORGANIZE_AWAIT_FILE"
+	StatePagenumAwaitFile   State = "PAGENUM_AWAIT_FILE"
+	StatePagenumAwaitPos    State = "PAGENUM_AWAIT_POS"
+	StateOrganizeAwaitFile  State = "ORGANIZE_AWAIT_FILE"
 	StateOrganizeAwaitPages State = "ORGANIZE_AWAIT_PAGES"
 	StateHTML2PDFAwaitInput State = "HTML2PDF_AWAIT_INPUT"
-	StateOCRAwaitFile      State = "OCR_AWAIT_FILE"
-	StateOCRAwaitLang      State = "OCR_AWAIT_LANG"
+	StateOCRAwaitFile       State = "OCR_AWAIT_FILE"
+	StateOCRAwaitLang       State = "OCR_AWAIT_LANG"
 )
 
 type FileMeta struct {
@@ -50,13 +50,14 @@ type FileMeta struct {
 }
 
 type UserSession struct {
-	UserID     int64
-	State      State
-	Language   string // "uz", "en", "ru"
-	Files      []FileMeta
-	Metadata   map[string]string
-	SessionDir string
-	LastActive time.Time
+	UserID         int64
+	State          State
+	Language       string // "uz", "en", "ru"
+	Files          []FileMeta
+	Metadata       map[string]string
+	TempMessageIDs []int64
+	SessionDir     string
+	LastActive     time.Time
 }
 
 type Manager struct {
@@ -84,13 +85,14 @@ func (m *Manager) Get(userID int64) *UserSession {
 		_ = os.MkdirAll(sessDir, 0755)
 
 		sess = &UserSession{
-			UserID:     userID,
-			State:      StateIdle,
-			Language:   "uz",
-			Files:      make([]FileMeta, 0),
-			Metadata:   make(map[string]string),
-			SessionDir: sessDir,
-			LastActive: time.Now(),
+			UserID:         userID,
+			State:          StateIdle,
+			Language:       "uz",
+			Files:          make([]FileMeta, 0),
+			Metadata:       make(map[string]string),
+			TempMessageIDs: make([]int64, 0),
+			SessionDir:     sessDir,
+			LastActive:     time.Now(),
 		}
 		m.sessions[userID] = sess
 	} else {
@@ -137,6 +139,25 @@ func (m *Manager) SetMeta(userID int64, key, val string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	sess.Metadata[key] = val
+}
+
+func (m *Manager) AddTempMsg(userID int64, msgID int64) {
+	if msgID <= 0 {
+		return
+	}
+	sess := m.Get(userID)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	sess.TempMessageIDs = append(sess.TempMessageIDs, msgID)
+}
+
+func (m *Manager) PopTempMsgs(userID int64) []int64 {
+	sess := m.Get(userID)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	msgs := sess.TempMessageIDs
+	sess.TempMessageIDs = make([]int64, 0)
+	return msgs
 }
 
 func (m *Manager) cleanupLoop() {

@@ -34,6 +34,21 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 
 	h := botHandlers.NewBotHandlers(cfg, sm, pdfcpuEng, convEng)
 
+	// Register Bot Commands & Descriptions with Telegram
+	_, _ = b.SetMyCommands([]gotgbot.BotCommand{
+		{Command: "start", Description: "🚀 Asosiy menyu / Main Menu"},
+		{Command: "cancel", Description: "❌ Operatsiyani bekor qilish / Cancel"},
+		{Command: "lang", Description: "🌐 Tilni tanlash / Select Language"},
+	}, nil)
+
+	_, _ = b.SetMyDescription(&gotgbot.SetMyDescriptionOpts{
+		Description: "✨ iLovePDF Telegram Boti — PDF fayllaringiz bilan ishlash uchun 20+ professional uskunalar to'plami!\n\n• PDF Birlashtirish & Ajratish\n• Word, Excel, PPT, HTML <-> PDF Konvertatsiya\n• Parol Qo'yish, Siqish & OCR Matn Tanish",
+	})
+
+	_, _ = b.SetMyShortDescription(&gotgbot.SetMyShortDescriptionOpts{
+		ShortDescription: "iLovePDF Telegram Boti — PDF fayllar bilan ishlash va konvertatsiya!",
+	})
+
 	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{
 		Error: func(b *gotgbot.Bot, ctx *ext.Context, err error) ext.DispatcherAction {
 			log.Printf("[ERROR] Dispatcher error: %v", err)
@@ -47,6 +62,7 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 	// Command Handlers
 	dispatcher.AddHandler(handlers.NewCommand("start", h.HandleStart))
 	dispatcher.AddHandler(handlers.NewCommand("cancel", h.HandleCancel))
+	dispatcher.AddHandler(handlers.NewCommand("lang", h.HandleLangNav))
 
 	// Callback Query Handlers
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Equal("action:cancel"), h.HandleCancel))
