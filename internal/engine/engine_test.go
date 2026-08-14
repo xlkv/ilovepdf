@@ -1,34 +1,43 @@
 package engine
 
 import (
+	"image"
+	"image/color"
+	"image/png"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 )
+
+func createSamplePNG(filePath string, c color.Color) error {
+	img := image.NewRGBA(image.Rect(0, 0, 200, 200))
+	for x := 0; x < 200; x++ {
+		for y := 0; y < 200; y++ {
+			img.Set(x, y, c)
+		}
+	}
+	f, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return png.Encode(f, img)
+}
 
 func TestPDFEngineAllCases(t *testing.T) {
 	tempDir := t.TempDir()
 	pdfcpu := NewPDFCPUEngine()
 	conv := NewConvertersEngine("/usr/local/bin/soffice", "/usr/local/bin/python3", "/opt/homebrew/bin/tesseract")
 
-	// 1. Create 2 sample images and convert to PDF
+	// 1. Create 2 sample images natively in Go and convert to PDF
 	img1 := filepath.Join(tempDir, "img1.png")
 	img2 := filepath.Join(tempDir, "img2.png")
 
-	script := `from PIL import Image
-im1 = Image.new("RGB", (200, 200), "red")
-im1.save(` + `"` + img1 + `"` + `)
-im2 = Image.new("RGB", (200, 200), "blue")
-im2.save(` + `"` + img2 + `"` + `)
-`
-	pyFile := filepath.Join(tempDir, "gen.py")
-	_ = os.WriteFile(pyFile, []byte(script), 0644)
-
-	cmdPy := exec.Command("/usr/local/bin/python3", pyFile)
-	outPy, errPy := cmdPy.CombinedOutput()
-	if errPy != nil {
-		t.Fatalf("python image creation failed: %v, out: %s", errPy, string(outPy))
+	if err := createSamplePNG(img1, color.RGBA{R: 255, A: 255}); err != nil {
+		t.Fatalf("Failed to create img1: %v", err)
+	}
+	if err := createSamplePNG(img2, color.RGBA{B: 255, A: 255}); err != nil {
+		t.Fatalf("Failed to create img2: %v", err)
 	}
 
 	pdf1 := filepath.Join(tempDir, "doc1.pdf")

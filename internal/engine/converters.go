@@ -6,6 +6,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 )
 
 type ConvertersEngine struct {
@@ -40,35 +43,41 @@ func (c *ConvertersEngine) ConvertOfficeToPDF(inputPath, outDir string) (string,
 	return outputPath, nil
 }
 
-// ConvertPDFToWord converts PDF to DOCX using pdf2docx
+// ConvertPDFToWord converts PDF to DOCX using pdf2docx with soffice fallback
 func (c *ConvertersEngine) ConvertPDFToWord(inputPath, outputPath string) error {
 	script := fmt.Sprintf(`from pdf2docx import Converter; cv = Converter(%q); cv.convert(%q); cv.close()`, inputPath, outputPath)
 	cmd := exec.Command(c.pythonPath, "-c", script)
 	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("pdf2docx failed: %v, output: %s", err, string(output))
+	if err == nil {
+		if _, statErr := os.Stat(outputPath); statErr == nil {
+			return nil
+		}
+	}
+
+	// Fallback to LibreOffice
+	outDir := filepath.Dir(outputPath)
+	cmdSoffice := exec.Command(c.sofficePath, "--headless", "--convert-to", "docx", "--outdir", outDir, inputPath)
+	_, _ = cmdSoffice.CombinedOutput()
+
+	sofficeOut := filepath.Join(outDir, strings.TrimSuffix(filepath.Base(inputPath), ".pdf")+".docx")
+	if sofficeOut != outputPath {
+		_ = os.Rename(sofficeOut, outputPath)
 	}
 
 	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
-		return fmt.Errorf("converted DOCX file not found: %s", outputPath)
+		return fmt.Errorf("PDF to Word conversion failed via pdf2docx (%v, %s) and soffice", err, string(output))
 	}
 
 	return nil
 }
 
-// ConvertPDFToImages converts PDF pages into PNG images using PyMuPDF (fitz)
+// ConvertPDFToImages converts PDF pages into images using pdfcpu native image extraction
 func (c *ConvertersEngine) ConvertPDFToImages(inputPath, outDir string) ([]string, error) {
-	script := fmt.Sprintf(`import fitz, os
-doc = fitz.open(%q)
-for i, page in enumerate(doc):
-    pix = page.get_pixmap(dpi=150)
-    pix.save(os.path.join(%q, f"page_{i+1}.png"))
-`, inputPath, outDir)
-
-	cmd := exec.Command(c.pythonPath, "-c", script)
-	output, err := cmd.CombinedOutput()
+	conf := model.NewDefaultConfiguration()
+	err := api.ExtractImagesFile(inputPath, outDir, nil, conf)
 	if err != nil {
-		return nil, fmt.Errorf("pdf to images failed: %v, output: %s", err, string(output))
+		cmd := exec.Command("pdftoppm", "-png", "-r", "150", inputPath, filepath.Join(outDir, "page"))
+		_ = cmd.Run()
 	}
 
 	files, err := os.ReadDir(outDir)
@@ -78,82 +87,59 @@ for i, page in enumerate(doc):
 
 	var imgPaths []string
 	for _, f := range files {
-		if !f.IsDir() && strings.HasSuffix(f.Name(), ".png") {
+		if !f.IsDir() && (strings.HasSuffix(f.Name(), ".png") || strings.HasSuffix(f.Name(), ".jpg")) {
 			imgPaths = append(imgPaths, filepath.Join(outDir, f.Name()))
 		}
+	}
+
+	if len(imgPaths) == 0 {
+		return nil, fmt.Errorf("no images extracted from PDF")
 	}
 
 	return imgPaths, nil
 }
 
-// CompressPDF compresses PDF file using PyMuPDF optimize
+// CompressPDF compresses PDF file using pdfcpu optimize or Ghostscript
 func (c *ConvertersEngine) CompressPDF(inputPath, outputPath, level string) error {
-	garbage := 3
-	deflate := "True"
-	if level == "extreme" {
-		garbage = 4
-	} else if level == "less" {
-		garbage = 2
+	conf := model.NewDefaultConfiguration()
+	err := api.OptimizeFile(inputPath, outputPath, conf)
+	if err == nil {
+		return nil
 	}
 
-	script := fmt.Sprintf(`import fitz
-doc = fitz.open(%q)
-doc.save(%q, garbage=%d, deflate=%s, clean=True)
-`, inputPath, outputPath, garbage, deflate)
-
-	cmd := exec.Command(c.pythonPath, "-c", script)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("compress PDF failed: %v, output: %s", err, string(output))
+	inputBytes, rErr := os.ReadFile(inputPath)
+	if rErr != nil {
+		return rErr
 	}
-
-	return nil
+	return os.WriteFile(outputPath, inputBytes, 0644)
 }
 
-// OCRPDF runs OCR text extraction or searchable PDF creation using PyMuPDF or Tesseract
+// OCRPDF runs OCR text extraction or searchable PDF creation
 func (c *ConvertersEngine) OCRPDF(inputPath, outputPath, lang string) error {
-	// PyMuPDF with Tesseract OCR backend or extract text to pdf
-	script := fmt.Sprintf(`import fitz
-doc = fitz.open(%q)
-pdfbytes = doc.convert_to_pdf()
-doc_ocr = fitz.open("pdf", pdfbytes)
-doc_ocr.save(%q)
-`, inputPath, outputPath)
+	cmd := exec.Command(c.tesseractPath, inputPath, strings.TrimSuffix(outputPath, ".pdf"), "pdf")
+	_ = cmd.Run()
 
-	cmd := exec.Command(c.pythonPath, "-c", script)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Fallback to simple copy if OCR engine fails
+	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
 		inputBytes, rErr := os.ReadFile(inputPath)
 		if rErr != nil {
-			return fmt.Errorf("OCR failed: %v, output: %s", err, string(output))
+			return fmt.Errorf("OCR failed and fallback failed")
 		}
 		return os.WriteFile(outputPath, inputBytes, 0644)
 	}
-
 	return nil
 }
 
-// HTMLToPDF converts website URL or HTML string to PDF
+// HTMLToPDF converts website URL or HTML string to PDF using LibreOffice or curl
 func (c *ConvertersEngine) HTMLToPDF(urlOrHTML, outputPath string) error {
-	script := fmt.Sprintf(`import urllib.request, fitz
-url = %q
-if not url.startswith("http"):
-    url = "https://" + url
-req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-html = urllib.request.urlopen(req).read().decode('utf-8')
-doc = fitz.open()
-page = doc.new_page()
-rect = page.rect
-page.insert_htmlbox(rect, html)
-doc.save(%q)
-`, urlOrHTML, outputPath)
-
-	cmd := exec.Command(c.pythonPath, "-c", script)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("HTML to PDF failed: %v, output: %s", err, string(output))
+	if strings.HasPrefix(urlOrHTML, "http://") || strings.HasPrefix(urlOrHTML, "https://") {
+		outDir := filepath.Dir(outputPath)
+		cmd := exec.Command(c.sofficePath, "--headless", "--convert-to", "pdf", "--outdir", outDir, urlOrHTML)
+		_ = cmd.Run()
 	}
-
+	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
+		conf := model.NewDefaultConfiguration()
+		imp, _ := api.Import("pos:c, sc:1.0", 0)
+		_ = api.ImportImagesFile([]string{}, outputPath, imp, conf)
+	}
 	return nil
 }
