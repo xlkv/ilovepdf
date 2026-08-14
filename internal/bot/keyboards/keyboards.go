@@ -6,7 +6,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 )
 
-// MainMenuKeyboard builds the main menu with 20 PDF tools
+// MainMenuKeyboard builds the main menu with 20 PDF tools + Telegram Mini App WebApp Button
 func MainMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 	var (
 		txtMerge     = "🧩 Merge PDF"
@@ -27,6 +27,7 @@ func MainMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 		txtHTML2PDF  = "🌐 HTML to PDF"
 		txtOCR       = "🔍 OCR PDF"
 		txtLang      = "🌐 Language / Tillar"
+		txtMiniApp   = "📱 Mini App Visual Editor (xlkv.uz)"
 	)
 
 	if lang == "ru" {
@@ -48,6 +49,7 @@ func MainMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 		txtHTML2PDF = "🌐 HTML в PDF"
 		txtOCR = "🔍 OCR Распознавание"
 		txtLang = "🌐 Язык / Language"
+		txtMiniApp = "📱 Visual Editor (xlkv.uz)"
 	} else if lang == "uz" {
 		txtMerge = "🧩 PDF Birlashtirish"
 		txtSplit = "✂️ PDF Ajratish"
@@ -67,10 +69,14 @@ func MainMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 		txtHTML2PDF = "🌐 Web -> PDF"
 		txtOCR = "🔍 OCR Matn"
 		txtLang = "🌐 Tilni O'zgartirish"
+		txtMiniApp = "📱 Mini App Editor (xlkv.uz)"
 	}
 
 	return gotgbot.InlineKeyboardMarkup{
 		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
+			{
+				{Text: txtMiniApp, WebApp: &gotgbot.WebAppInfo{Url: "https://ilovepdf.xlkv.uz"}},
+			},
 			{
 				{Text: txtMerge, CallbackData: "tool:merge"},
 				{Text: txtSplit, CallbackData: "tool:split"},

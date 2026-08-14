@@ -3,6 +3,7 @@ package bot
 import (
 	"fmt"
 	"log"
+	"net/http"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -39,27 +40,20 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 		{Command: "start", Description: "🚀 Asosiy menyuni ochish / Open Main Menu"},
 		{Command: "cancel", Description: "❌ Operatsiyani bekor qilish / Cancel Action"},
 		{Command: "lang", Description: "🌐 Tilni o'zgartirish / Change Language"},
+		{Command: "stats", Description: "📊 Admin statistika (Admin only)"},
 	}, nil)
 
 	// Set Bot Description ("What can this bot do?" intro screen)
-	botDescription := `✨ iLovePDF Telegram Boti — PDF va hujjatlar bilan ishlash uchun professional platforma!
+	botDescription := `🇺🇿 iLovePDF Bot — PDF fayllar bilan ishlash, siqish va konvertatsiya qilish uchun qulay bot!
 
-🚀 Asosiy imkoniyatlar / Key Features:
-• 🧩 PDF Birlashtirish (Merge) & Ajratish (Split)
-• 📝 Word, Excel, PowerPoint, HTML -> PDF Konvertatsiya
-• 📄 PDF -> Word (DOCX) & JPG Rasmlarga ajratish
-• 📉 PDF Siqish (Compress) & Parol Qo'yish / O'chirish
-• 🏷 Watermark Qo'shish & Sahifalarni Tartiblash (Organize)
-• 🔍 OCR - Scan qilingan rasmli PDF matnlarini tanish
-
-Boshlash uchun pastdagi Start / Boshlash tugmasini bosing!`
+🇷🇺 iLovePDF Bot — Удобный бот для работы, сжатия и конвертации PDF файлов!`
 
 	_, _ = b.SetMyDescription(&gotgbot.SetMyDescriptionOpts{
 		Description: botDescription,
 	})
 
 	// Set Bot Short Description (Profile bio text)
-	botShortDescription := "✨ iLovePDF Boti — PDF birlashtirish, siqish, Word/Excel/PPT/JPG konvertatsiya va OCR!"
+	botShortDescription := "🇺🇿/🇷🇺 PDF fayllar bilan ishlash boti / Бот для работы с PDF!"
 
 	_, _ = b.SetMyShortDescription(&gotgbot.SetMyShortDescriptionOpts{
 		ShortDescription: botShortDescription,
@@ -79,6 +73,8 @@ Boshlash uchun pastdagi Start / Boshlash tugmasini bosing!`
 	dispatcher.AddHandler(handlers.NewCommand("start", h.HandleStart))
 	dispatcher.AddHandler(handlers.NewCommand("cancel", h.HandleCancel))
 	dispatcher.AddHandler(handlers.NewCommand("lang", h.HandleLangNav))
+	dispatcher.AddHandler(handlers.NewCommand("stats", h.HandleStats))
+	dispatcher.AddHandler(handlers.NewCommand("broadcast", h.HandleBroadcast))
 
 	// Callback Query Handlers
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Equal("action:cancel"), h.HandleCancel))
@@ -113,6 +109,17 @@ Boshlash uchun pastdagi Start / Boshlash tugmasini bosing!`
 
 func (b *Bot) Start() error {
 	log.Printf("🚀 Starting iLovePDF Bot as @%s...", b.b.User.Username)
+
+	// Start WebApp static HTTP server on port 8088 for xlkv.uz reverse proxy
+	go func() {
+		fs := http.FileServer(http.Dir("webapp"))
+		http.Handle("/", fs)
+		log.Printf("🌐 WebApp HTTP Server running on http://0.0.0.0:8088 (ready for xlkv.uz)")
+		if err := http.ListenAndServe(":8088", nil); err != nil {
+			log.Printf("[WARN] WebApp HTTP server stopped: %v", err)
+		}
+	}()
+
 	err := b.updater.StartPolling(b.b, &ext.PollingOpts{
 		DropPendingUpdates: true,
 		GetUpdatesOpts: &gotgbot.GetUpdatesOpts{

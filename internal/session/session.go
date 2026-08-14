@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,19 +62,110 @@ type UserSession struct {
 	LastActive       time.Time
 }
 
+type AnalyticsData struct {
+	Users               map[int64]string `json:"users"` // userID -> lastActive ISO string
+	ToolUsage           map[string]int64 `json:"tool_usage"`
+	TotalProcessedFiles int64            `json:"total_processed_files"`
+}
+
 type Manager struct {
-	mu       sync.RWMutex
-	sessions map[int64]*UserSession
-	baseDir  string
+	mu        sync.RWMutex
+	sessions  map[int64]*UserSession
+	baseDir   string
+	analytics AnalyticsData
+	dataFile  string
 }
 
 func NewManager(baseDir string) *Manager {
+	dataDir := filepath.Join(baseDir, "data")
+	_ = os.MkdirAll(dataDir, 0755)
+	dataFile := filepath.Join(dataDir, "analytics.json")
+
 	m := &Manager{
 		sessions: make(map[int64]*UserSession),
 		baseDir:  baseDir,
+		dataFile: dataFile,
+		analytics: AnalyticsData{
+			Users:               make(map[int64]string),
+			ToolUsage:           make(map[string]int64),
+			TotalProcessedFiles: 0,
+		},
 	}
+
+	m.loadAnalytics()
 	go m.cleanupLoop()
 	return m
+}
+
+func (m *Manager) loadAnalytics() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	data, err := os.ReadFile(m.dataFile)
+	if err == nil {
+		_ = json.Unmarshal(data, &m.analytics)
+	}
+	if m.analytics.Users == nil {
+		m.analytics.Users = make(map[int64]string)
+	}
+	if m.analytics.ToolUsage == nil {
+		m.analytics.ToolUsage = make(map[string]int64)
+	}
+}
+
+func (m *Manager) saveAnalytics() {
+	data, err := json.MarshalIndent(m.analytics, "", "  ")
+	if err == nil {
+		_ = os.WriteFile(m.dataFile, data, 0644)
+	}
+}
+
+func (m *Manager) TrackUser(userID int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.analytics.Users[userID] = time.Now().Format(time.RFC3339)
+	m.saveAnalytics()
+}
+
+func (m *Manager) TrackToolUsage(toolID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.analytics.ToolUsage[toolID]++
+	m.analytics.TotalProcessedFiles++
+	m.saveAnalytics()
+}
+
+func (m *Manager) GetStats() (totalUsers int, activeToday int, totalFiles int64, toolStats map[string]int64) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	todayStr := time.Now().Format("2006-01-02")
+	active := 0
+	for _, lastActive := range m.analytics.Users {
+		if len(lastActive) >= 10 && lastActive[:10] == todayStr {
+			active++
+		}
+	}
+
+	toolStatsCopy := make(map[string]int64)
+	for k, v := range m.analytics.ToolUsage {
+		toolStatsCopy[k] = v
+	}
+
+	return len(m.analytics.Users), active, m.analytics.TotalProcessedFiles, toolStatsCopy
+}
+
+func (m *Manager) GetAllUsers() []int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	users := make([]int64, 0, len(m.analytics.Users))
+	for userID := range m.analytics.Users {
+		users = append(users, userID)
+	}
+	return users
 }
 
 func (m *Manager) Get(userID int64) *UserSession {
@@ -101,6 +193,7 @@ func (m *Manager) Get(userID int64) *UserSession {
 		sess.LastActive = time.Now()
 	}
 
+	m.analytics.Users[userID] = time.Now().Format(time.RFC3339)
 	return sess
 }
 
@@ -190,6 +283,7 @@ func (m *Manager) cleanupLoop() {
 				delete(m.sessions, userID)
 			}
 		}
+		m.saveAnalytics()
 		m.mu.Unlock()
 	}
 }

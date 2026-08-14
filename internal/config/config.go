@@ -2,14 +2,16 @@ package config
 
 import (
 	"os"
+	"strconv"
 )
 
 type Config struct {
-	BotToken    string
-	TempDir     string
-	SofficePath string
-	PythonPath  string
+	BotToken      string
+	TempDir       string
+	SofficePath   string
+	PythonPath    string
 	TesseractPath string
+	AdminUserID   int64
 }
 
 func Load() *Config {
@@ -38,6 +40,9 @@ func Load() *Config {
 		tesseract = "/opt/homebrew/bin/tesseract"
 	}
 
+	adminIDStr := os.Getenv("ADMIN_USER_ID")
+	adminID, _ := strconv.ParseInt(adminIDStr, 10, 64)
+
 	_ = os.MkdirAll(tempDir, 0755)
 
 	return &Config{
@@ -46,5 +51,6 @@ func Load() *Config {
 		SofficePath:   soffice,
 		PythonPath:    python,
 		TesseractPath: tesseract,
+		AdminUserID:   adminID,
 	}
 }
