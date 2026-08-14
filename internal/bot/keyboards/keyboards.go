@@ -109,6 +109,24 @@ func MainMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 	}
 }
 
+// BackToMenuKeyboard returns button to jump back to main menu
+func BackToMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
+	text := "🔙 Asosiy Menyu"
+	if lang == "ru" {
+		text = "🔙 Главное меню"
+	} else if lang == "en" {
+		text = "🔙 Main Menu"
+	}
+
+	return gotgbot.InlineKeyboardMarkup{
+		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
+			{
+				{Text: text, CallbackData: "nav:main"},
+			},
+		},
+	}
+}
+
 // CancelKeyboard returns a single cancel button
 func CancelKeyboard() gotgbot.InlineKeyboardMarkup {
 	return gotgbot.InlineKeyboardMarkup{

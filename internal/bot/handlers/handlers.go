@@ -46,7 +46,7 @@ func (h *BotHandlers) EditMessage(b *gotgbot.Bot, chatID int64, messageID int64,
 	return msg, err
 }
 
-// HandleStart responds to /start
+// HandleStart responds to /start or main menu callback
 func (h *BotHandlers) HandleStart(b *gotgbot.Bot, ctx *ext.Context) error {
 	userID := ctx.EffectiveUser.Id
 	h.sm.Reset(userID)
@@ -60,6 +60,15 @@ func (h *BotHandlers) HandleStart(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 
 	kb := keyboards.MainMenuKeyboard(sess.Language)
+
+	if ctx.CallbackQuery != nil {
+		_, _ = ctx.CallbackQuery.Answer(b, nil)
+		_, err := h.EditMessage(b, ctx.EffectiveChat.Id, ctx.EffectiveMessage.MessageId, msgText, &kb)
+		if err == nil {
+			return nil
+		}
+	}
+
 	_, err := b.SendMessage(ctx.EffectiveChat.Id, msgText, &gotgbot.SendMessageOpts{
 		ParseMode:   "Markdown",
 		ReplyMarkup: kb,
@@ -144,8 +153,8 @@ func (h *BotHandlers) DownloadTelegramFile(b *gotgbot.Bot, fileID, destPath stri
 	return nil
 }
 
-// SendDocumentResponse sends output file to user
-func (h *BotHandlers) SendDocumentResponse(b *gotgbot.Bot, chatID int64, filePath, caption string) error {
+// SendDocumentResponse sends output file to user with Back to Main Menu button attached
+func (h *BotHandlers) SendDocumentResponse(b *gotgbot.Bot, chatID int64, filePath, caption, lang string) error {
 	fileData, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open output file: %w", err)
@@ -153,9 +162,11 @@ func (h *BotHandlers) SendDocumentResponse(b *gotgbot.Bot, chatID int64, filePat
 	defer fileData.Close()
 
 	fileName := filepath.Base(filePath)
+	kb := keyboards.BackToMenuKeyboard(lang)
 	_, err = b.SendDocument(chatID, gotgbot.InputFileByReader(fileName, fileData), &gotgbot.SendDocumentOpts{
-		Caption:   caption,
-		ParseMode: "Markdown",
+		Caption:     caption,
+		ParseMode:   "Markdown",
+		ReplyMarkup: kb,
 	})
 	return err
 }
