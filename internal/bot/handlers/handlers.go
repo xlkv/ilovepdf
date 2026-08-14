@@ -41,7 +41,7 @@ func (h *BotHandlers) ClearOldMessages(b *gotgbot.Bot, chatID int64, userID int6
 	}
 }
 
-// EditMessage is a helper to safely edit Telegram messages
+// EditMessage is a helper to safely edit both Telegram text & photo caption messages
 func (h *BotHandlers) EditMessage(b *gotgbot.Bot, chatID int64, messageID int64, text string, replyMarkup *gotgbot.InlineKeyboardMarkup) (*gotgbot.Message, error) {
 	opts := &gotgbot.EditMessageTextOpts{
 		Text:      text,
@@ -53,6 +53,19 @@ func (h *BotHandlers) EditMessage(b *gotgbot.Bot, chatID int64, messageID int64,
 		opts.ReplyMarkup = *replyMarkup
 	}
 	msg, _, err := b.EditMessageText(opts)
+	if err != nil {
+		// Fallback to EditMessageCaption if editing a Photo/Banner message
+		capOpts := &gotgbot.EditMessageCaptionOpts{
+			Caption:   text,
+			ChatId:    chatID,
+			MessageId: messageID,
+			ParseMode: "Markdown",
+		}
+		if replyMarkup != nil {
+			capOpts.ReplyMarkup = *replyMarkup
+		}
+		msg, _, err = b.EditMessageCaption(capOpts)
+	}
 	return msg, err
 }
 

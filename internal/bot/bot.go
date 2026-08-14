@@ -34,19 +34,35 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 
 	h := botHandlers.NewBotHandlers(cfg, sm, pdfcpuEng, convEng)
 
-	// Register Bot Commands & Descriptions with Telegram
+	// Register Bot Commands with Telegram Menu
 	_, _ = b.SetMyCommands([]gotgbot.BotCommand{
-		{Command: "start", Description: "🚀 Asosiy menyu / Main Menu"},
-		{Command: "cancel", Description: "❌ Operatsiyani bekor qilish / Cancel"},
-		{Command: "lang", Description: "🌐 Tilni tanlash / Select Language"},
+		{Command: "start", Description: "🚀 Asosiy menyuni ochish / Open Main Menu"},
+		{Command: "cancel", Description: "❌ Operatsiyani bekor qilish / Cancel Action"},
+		{Command: "lang", Description: "🌐 Tilni o'zgartirish / Change Language"},
 	}, nil)
 
+	// Set Bot Description ("What can this bot do?" intro screen)
+	botDescription := `✨ iLovePDF Telegram Boti — PDF va hujjatlar bilan ishlash uchun professional platforma!
+
+🚀 Asosiy imkoniyatlar / Key Features:
+• 🧩 PDF Birlashtirish (Merge) & Ajratish (Split)
+• 📝 Word, Excel, PowerPoint, HTML -> PDF Konvertatsiya
+• 📄 PDF -> Word (DOCX) & JPG Rasmlarga ajratish
+• 📉 PDF Siqish (Compress) & Parol Qo'yish / O'chirish
+• 🏷 Watermark Qo'shish & Sahifalarni Tartiblash (Organize)
+• 🔍 OCR - Scan qilingan rasmli PDF matnlarini tanish
+
+Boshlash uchun pastdagi Start / Boshlash tugmasini bosing!`
+
 	_, _ = b.SetMyDescription(&gotgbot.SetMyDescriptionOpts{
-		Description: "✨ iLovePDF Telegram Boti — PDF fayllaringiz bilan ishlash uchun 20+ professional uskunalar to'plami!\n\n• PDF Birlashtirish & Ajratish\n• Word, Excel, PPT, HTML <-> PDF Konvertatsiya\n• Parol Qo'yish, Siqish & OCR Matn Tanish",
+		Description: botDescription,
 	})
 
+	// Set Bot Short Description (Profile bio text)
+	botShortDescription := "✨ iLovePDF Boti — PDF birlashtirish, siqish, Word/Excel/PPT/JPG konvertatsiya va OCR!"
+
 	_, _ = b.SetMyShortDescription(&gotgbot.SetMyShortDescriptionOpts{
-		ShortDescription: "iLovePDF Telegram Boti — PDF fayllar bilan ishlash va konvertatsiya!",
+		ShortDescription: botShortDescription,
 	})
 
 	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{
