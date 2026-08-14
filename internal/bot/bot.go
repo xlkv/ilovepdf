@@ -37,23 +37,25 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 
 	// Register Bot Commands with Telegram Menu
 	_, _ = b.SetMyCommands([]gotgbot.BotCommand{
-		{Command: "start", Description: "🚀 Asosiy menyuni ochish / Open Main Menu"},
-		{Command: "cancel", Description: "❌ Operatsiyani bekor qilish / Cancel Action"},
-		{Command: "lang", Description: "🌐 Tilni o'zgartirish / Change Language"},
+		{Command: "start", Description: "🚀 Asosiy menyu / Main Menu"},
+		{Command: "cancel", Description: "❌ Bekor qilish / Cancel"},
+		{Command: "lang", Description: "🌐 Tilni o'zgartirish / Language"},
 		{Command: "stats", Description: "📊 Admin statistika (Admin only)"},
 	}, nil)
 
 	// Set Bot Description ("What can this bot do?" intro screen)
-	botDescription := `🇺🇿 iLovePDF Bot — PDF fayllar bilan ishlash, siqish va konvertatsiya qilish uchun qulay bot!
+	botDescription := `✨ iLovePDF — Smart PDF Tools
 
-🇷🇺 iLovePDF Bot — Удобный бот для работы, сжатия и конвертации PDF файлов!`
+🇺🇿 PDF fayllar bilan ishlash va konvertatsiya qilish.
+🇷🇺 Удобные инструменты для работы и конвертации PDF.
+🇬🇧 All-in-one PDF tools and converter.`
 
 	_, _ = b.SetMyDescription(&gotgbot.SetMyDescriptionOpts{
 		Description: botDescription,
 	})
 
 	// Set Bot Short Description (Profile bio text)
-	botShortDescription := "🇺🇿/🇷🇺 PDF fayllar bilan ishlash boti / Бот для работы с PDF!"
+	botShortDescription := "✨ Smart PDF tools / PDF fayllar boti"
 
 	_, _ = b.SetMyShortDescription(&gotgbot.SetMyShortDescriptionOpts{
 		ShortDescription: botShortDescription,

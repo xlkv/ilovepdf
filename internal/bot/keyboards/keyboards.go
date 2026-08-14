@@ -6,7 +6,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 )
 
-// MainMenuKeyboard builds the main menu with 20 PDF tools + Telegram Mini App WebApp Button
+// MainMenuKeyboard builds the clean minimalist main menu in 3 languages
 func MainMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 	var (
 		txtMerge     = "🧩 Merge PDF"
@@ -24,15 +24,15 @@ func MainMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 		txtWatermark = "🏷 Watermark"
 		txtPageNum   = "🔢 Page Numbers"
 		txtOrganize  = "🗂 Organize PDF"
-		txtHTML2PDF  = "🌐 HTML to PDF"
+		txtHTML2PDF  = "🌐 Web to PDF"
 		txtOCR       = "🔍 OCR PDF"
-		txtLang      = "🌐 Language / Tillar"
-		txtMiniApp   = "📱 Mini App Visual Editor (xlkv.uz)"
+		txtLang      = "🌐 Language"
+		txtMiniApp   = "📱 Visual Editor"
 	)
 
 	if lang == "ru" {
-		txtMerge = "🧩 Объединить PDF"
-		txtSplit = "✂️ Разделить PDF"
+		txtMerge = "🧩 Объединить"
+		txtSplit = "✂️ Разделить"
 		txtCompress = "📉 Сжать PDF"
 		txtWord2PDF = "📝 Word в PDF"
 		txtPPT2PDF = "📊 PPT в PDF"
@@ -40,36 +40,36 @@ func MainMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 		txtPDF2Word = "📄 PDF в Word"
 		txtPDF2JPG = "🖼 PDF в JPG"
 		txtJPG2PDF = "📷 JPG в PDF"
-		txtRotate = "🔄 Повернуть PDF"
-		txtProtect = "🔒 Защитить PDF"
+		txtRotate = "🔄 Повернуть"
+		txtProtect = "🔒 Защитить"
 		txtUnlock = "🔓 Снять пароль"
 		txtWatermark = "🏷 Водяной знак"
 		txtPageNum = "🔢 Нумерация"
 		txtOrganize = "🗂 Организовать"
-		txtHTML2PDF = "🌐 HTML в PDF"
-		txtOCR = "🔍 OCR Распознавание"
-		txtLang = "🌐 Язык / Language"
-		txtMiniApp = "📱 Visual Editor (xlkv.uz)"
+		txtHTML2PDF = "🌐 Web в PDF"
+		txtOCR = "🔍 OCR Текст"
+		txtLang = "🌐 Сменить язык"
+		txtMiniApp = "📱 Визуальный редактор"
 	} else if lang == "uz" {
-		txtMerge = "🧩 PDF Birlashtirish"
-		txtSplit = "✂️ PDF Ajratish"
-		txtCompress = "📉 PDF Siqish"
+		txtMerge = "🧩 Birlashtirish"
+		txtSplit = "✂️ Ajratish"
+		txtCompress = "📉 Siqish"
 		txtWord2PDF = "📝 Word -> PDF"
 		txtPPT2PDF = "📊 PPT -> PDF"
 		txtExcel2PDF = "📈 Excel -> PDF"
 		txtPDF2Word = "📄 PDF -> Word"
 		txtPDF2JPG = "🖼 PDF -> JPG"
 		txtJPG2PDF = "📷 JPG -> PDF"
-		txtRotate = "🔄 PDF Burish"
+		txtRotate = "🔄 Burish"
 		txtProtect = "🔒 Parol Qo'yish"
-		txtUnlock = "🔓 Parolni O'chirish"
+		txtUnlock = "🔓 Parol O'chirish"
 		txtWatermark = "🏷 Watermark"
 		txtPageNum = "🔢 Raqamlash"
 		txtOrganize = "🗂 Tartiblash"
 		txtHTML2PDF = "🌐 Web -> PDF"
 		txtOCR = "🔍 OCR Matn"
 		txtLang = "🌐 Tilni O'zgartirish"
-		txtMiniApp = "📱 Mini App Editor (xlkv.uz)"
+		txtMiniApp = "📱 Visual Editor"
 	}
 
 	return gotgbot.InlineKeyboardMarkup{
@@ -117,7 +117,7 @@ func MainMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 	}
 }
 
-// BackToMenuKeyboard returns button to jump back to main menu
+// BackToMenuKeyboard returns clean button to jump back to main menu
 func BackToMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 	text := "🔙 Asosiy Menyu"
 	if lang == "ru" {
@@ -135,24 +135,49 @@ func BackToMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 	}
 }
 
-// CancelKeyboard returns a single cancel button
-func CancelKeyboard() gotgbot.InlineKeyboardMarkup {
+// CancelKeyboard returns a clean cancel button in 3 languages
+func CancelKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
+	text := "❌ Bekor qilish"
+	if lang == "ru" {
+		text = "❌ Отмена"
+	} else if lang == "en" {
+		text = "❌ Cancel"
+	}
+
 	return gotgbot.InlineKeyboardMarkup{
 		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
 			{
-				{Text: "❌ Bekor qilish / Cancel", CallbackData: "action:cancel"},
+				{Text: text, CallbackData: "action:cancel"},
 			},
 		},
 	}
 }
 
-// MergeFilesKeyboard control keyboard during multi-file upload
-func MergeFilesKeyboard(count int) gotgbot.InlineKeyboardMarkup {
-	btnProcessText := fmt.Sprintf("🚀 Birlashtirish (%d ta fayl)", count)
+// MergeFilesKeyboard control keyboard during multi-file upload in 3 languages
+func MergeFilesKeyboard(count int, lang string) gotgbot.InlineKeyboardMarkup {
+	btnProcessText := fmt.Sprintf("🚀 Birlashtirish (%d)", count)
+	if lang == "ru" {
+		btnProcessText = fmt.Sprintf("🚀 Объединить (%d)", count)
+	} else if lang == "en" {
+		btnProcessText = fmt.Sprintf("🚀 Merge (%d)", count)
+	}
+
 	btnProcessData := "merge:process"
 	if count < 2 {
 		btnProcessText = "📥 Kamida 2 ta fayl yuboring"
+		if lang == "ru" {
+			btnProcessText = "📥 Отправьте минимум 2 файла"
+		} else if lang == "en" {
+			btnProcessText = "📥 Upload at least 2 files"
+		}
 		btnProcessData = "noop"
+	}
+
+	btnCancelText := "❌ Bekor qilish"
+	if lang == "ru" {
+		btnCancelText = "❌ Отмена"
+	} else if lang == "en" {
+		btnCancelText = "❌ Cancel"
 	}
 
 	return gotgbot.InlineKeyboardMarkup{
@@ -161,19 +186,37 @@ func MergeFilesKeyboard(count int) gotgbot.InlineKeyboardMarkup {
 				{Text: btnProcessText, CallbackData: btnProcessData},
 			},
 			{
-				{Text: "❌ Bekor qilish", CallbackData: "action:cancel"},
+				{Text: btnCancelText, CallbackData: "action:cancel"},
 			},
 		},
 	}
 }
 
-// JPG2PDFKeyboard control keyboard for image converting
-func JPG2PDFKeyboard(count int) gotgbot.InlineKeyboardMarkup {
-	btnText := fmt.Sprintf("📷 PDF ga o'girish (%d rasm)", count)
+// JPG2PDFKeyboard control keyboard for image converting in 3 languages
+func JPG2PDFKeyboard(count int, lang string) gotgbot.InlineKeyboardMarkup {
+	btnText := fmt.Sprintf("📷 PDF ga o'girish (%d)", count)
+	if lang == "ru" {
+		btnText = fmt.Sprintf("📷 Конвертировать в PDF (%d)", count)
+	} else if lang == "en" {
+		btnText = fmt.Sprintf("📷 Convert to PDF (%d)", count)
+	}
+
 	btnData := "jpg2pdf:process"
 	if count < 1 {
 		btnText = "📥 Rasm yuboring"
+		if lang == "ru" {
+			btnText = "📥 Отправьте изображение"
+		} else if lang == "en" {
+			btnText = "📥 Upload an image"
+		}
 		btnData = "noop"
+	}
+
+	btnCancelText := "❌ Bekor qilish"
+	if lang == "ru" {
+		btnCancelText = "❌ Отмена"
+	} else if lang == "en" {
+		btnCancelText = "❌ Cancel"
 	}
 
 	return gotgbot.InlineKeyboardMarkup{
@@ -182,43 +225,77 @@ func JPG2PDFKeyboard(count int) gotgbot.InlineKeyboardMarkup {
 				{Text: btnText, CallbackData: btnData},
 			},
 			{
-				{Text: "❌ Bekor qilish", CallbackData: "action:cancel"},
+				{Text: btnCancelText, CallbackData: "action:cancel"},
 			},
 		},
 	}
 }
 
-// CompressLevelKeyboard returns compression options
-func CompressLevelKeyboard() gotgbot.InlineKeyboardMarkup {
+// CompressLevelKeyboard returns clean compression options in 3 languages
+func CompressLevelKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
+	tExtreme := "⚡ Yuqori siqish (Extreme)"
+	tRec := "⚖️ Tavsiya etilgan (Recommended)"
+	tLess := "🔍 Kam siqish (High Quality)"
+	tCancel := "❌ Bekor qilish"
+
+	if lang == "ru" {
+		tExtreme = "⚡ Экстремальное сжатие"
+		tRec = "⚖️ Рекомендуемое сжатие"
+		tLess = "🔍 Высокое качество"
+		tCancel = "❌ Отмена"
+	} else if lang == "en" {
+		tExtreme = "⚡ Extreme Compression"
+		tRec = "⚖️ Recommended Compression"
+		tLess = "🔍 High Quality (Less)"
+		tCancel = "❌ Cancel"
+	}
+
 	return gotgbot.InlineKeyboardMarkup{
 		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
 			{
-				{Text: "⚡ Yuqori siqish (Extreme)", CallbackData: "compress:level:extreme"},
+				{Text: tExtreme, CallbackData: "compress:level:extreme"},
 			},
 			{
-				{Text: "⚖️ Tavsiya etilgan (Recommended)", CallbackData: "compress:level:recommended"},
+				{Text: tRec, CallbackData: "compress:level:recommended"},
 			},
 			{
-				{Text: "🔍 Kam siqish (High Quality)", CallbackData: "compress:level:less"},
+				{Text: tLess, CallbackData: "compress:level:less"},
 			},
 			{
-				{Text: "❌ Bekor qilish", CallbackData: "action:cancel"},
+				{Text: tCancel, CallbackData: "action:cancel"},
 			},
 		},
 	}
 }
 
-// RotateKeyboard returns angle selection
-func RotateKeyboard() gotgbot.InlineKeyboardMarkup {
+// RotateKeyboard returns angle selection in 3 languages
+func RotateKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
+	tRight := "↪️ 90° O'ngga"
+	tLeft := "↩️ 90° Chapga"
+	t180 := "🔄 180° Burish"
+	tCancel := "❌ Bekor qilish"
+
+	if lang == "ru" {
+		tRight = "↪️ 90° Вправо"
+		tLeft = "↩️ 90° Влево"
+		t180 = "🔄 180° Повернуть"
+		tCancel = "❌ Отмена"
+	} else if lang == "en" {
+		tRight = "↪️ 90° Right"
+		tLeft = "↩️ 90° Left"
+		t180 = "🔄 180° Rotate"
+		tCancel = "❌ Cancel"
+	}
+
 	return gotgbot.InlineKeyboardMarkup{
 		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
 			{
-				{Text: "↪️ 90° O'ngga", CallbackData: "rotate:angle:90"},
-				{Text: "↩️ 90° Chapga", CallbackData: "rotate:angle:270"},
-				{Text: "🔄 180° Burish", CallbackData: "rotate:angle:180"},
+				{Text: tRight, CallbackData: "rotate:angle:90"},
+				{Text: tLeft, CallbackData: "rotate:angle:270"},
+				{Text: t180, CallbackData: "rotate:angle:180"},
 			},
 			{
-				{Text: "❌ Bekor qilish", CallbackData: "action:cancel"},
+				{Text: tCancel, CallbackData: "action:cancel"},
 			},
 		},
 	}

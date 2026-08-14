@@ -76,9 +76,9 @@ func (h *BotHandlers) HandleStart(b *gotgbot.Bot, ctx *ext.Context) error {
 	h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 	sess := h.sm.Get(userID)
 
-	// Step 1: If user hasn't selected language yet, present Language Selection immediately
+	// Step 1: Prompt Language selection if first time
 	if !sess.LanguageSelected {
-		langPrompt := "🌐 **Iltimos, muloqot tilini tanlang:**\n🌐 **Пожалуйста, выберите язык:**\n🌐 **Please select your language:**"
+		langPrompt := "🌐 **Iltimos, tilni tanlang:**\n🌐 **Пожалуйста, выберите язык:**\n🌐 **Please select your language:**"
 		kb := keyboards.LanguageKeyboard()
 
 		if ctx.CallbackQuery != nil {
@@ -109,15 +109,15 @@ func (h *BotHandlers) HandleStart(b *gotgbot.Bot, ctx *ext.Context) error {
 		return err
 	}
 
-	// Step 2: Language is selected -> Present Main Menu in chosen language
+	// Step 2: Language is selected -> Present Main Menu
 	h.sm.Reset(userID)
 	sess = h.sm.Get(userID)
 
-	msgText := "✨ **iLovePDF Bot** — Kerakli bo'limni tanlang:"
+	msgText := "✨ **iLovePDF** — Kerakli bo'limni tanlang:"
 	if sess.Language == "ru" {
-		msgText = "✨ **iLovePDF Bot** — Выберите нужный раздел:"
+		msgText = "✨ **iLovePDF** — Выберите нужный раздел:"
 	} else if sess.Language == "en" {
-		msgText = "✨ **iLovePDF Bot** — Select a tool below:"
+		msgText = "✨ **iLovePDF** — Select a tool below:"
 	}
 
 	kb := keyboards.MainMenuKeyboard(sess.Language)
@@ -162,14 +162,14 @@ func (h *BotHandlers) HandleStats(b *gotgbot.Bot, ctx *ext.Context) error {
 		toolStatsText = "• Hozircha uskunalar statistikasi yo'q\n"
 	}
 
-	statsMsg := fmt.Sprintf(`📊 **iLovePDF Bot Analitika va Statistika**
+	statsMsg := fmt.Sprintf(`📊 **iLovePDF Analitika**
 
 👥 **Foydalanuvchilar:**
-• Jami ro'yxatdan o'tganlar: **%d ta**
-• Bugun faol foydalanuvchilar: **%d ta**
-• Qayta ishlangan jami fayllar: **%d ta**
+• Jami ro'yxatdan o'tganlar: **%d**
+• Bugun faol: **%d**
+• Qayta ishlangan fayllar: **%d**
 
-🛠 **Eng ko'p ishlatilgan uskunalar:**
+🛠 **Uskunalar statistikasi:**
 %s`, totalUsers, activeToday, totalFiles, toolStatsText)
 
 	_, err := b.SendMessage(ctx.EffectiveChat.Id, statsMsg, &gotgbot.SendMessageOpts{
@@ -206,8 +206,8 @@ func (h *BotHandlers) HandleBroadcast(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	resultText := fmt.Sprintf(`✅ **Xabar tarqatish yakunlandi!**
 
-• Muvaffaqiyatli yetib bordi: **%d ta**
-• Etib bormadi (bloklangan/o'chirilgan): **%d ta**`, successCount, failCount)
+• Muvaffaqiyatli: **%d**
+• Xatolik: **%d**`, successCount, failCount)
 
 	if statusMsg != nil {
 		_, _, _ = b.EditMessageText(&gotgbot.EditMessageTextOpts{
@@ -228,11 +228,11 @@ func (h *BotHandlers) HandleCancel(b *gotgbot.Bot, ctx *ext.Context) error {
 	h.sm.Reset(userID)
 	sess := h.sm.Get(userID)
 
-	msgText := "❌ Operatsiya bekor qilindi. Bosh menyu:"
+	msgText := "❌ Operatsiya bekor qilindi."
 	if sess.Language == "ru" {
-		msgText = "❌ Операция отменена. Главное меню:"
+		msgText = "❌ Операция отменена."
 	} else if sess.Language == "en" {
-		msgText = "❌ Operation cancelled. Main menu:"
+		msgText = "❌ Operation cancelled."
 	}
 
 	kb := keyboards.MainMenuKeyboard(sess.Language)
