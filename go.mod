@@ -1,6 +1,6 @@
 module github.com/xlkv/ilovepdf
 
-go 1.26.5
+go 1.22
 
 require (
 	github.com/PaulSonOfLars/gotgbot/v2 v2.0.0-rc.36
