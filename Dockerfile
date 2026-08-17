@@ -1,5 +1,5 @@
-# Build stage
-FROM golang:1.23-bookworm AS builder
+# Build stage using Go 1.25+
+FROM golang:1.25-bookworm AS builder
 
 ENV GOTOOLCHAIN=auto
 WORKDIR /app
