@@ -17,9 +17,20 @@ import (
 
 // HandleToolSelect responds when user clicks a tool from main menu
 func (h *BotHandlers) HandleToolSelect(b *gotgbot.Bot, ctx *ext.Context, toolID string) error {
-	userID := ctx.EffectiveUser.Id
+	u := ctx.EffectiveUser
+	userID := u.Id
 	h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 	h.sm.Reset(userID)
+
+	username := ""
+	if u.Username != "" {
+		username = "@" + u.Username
+	}
+
+	sess := h.sm.Get(userID)
+	lang := sess.Language
+	h.sm.TrackUserFull(userID, username, u.FirstName, u.LastName, lang)
+	h.sm.TrackToolUsageFull(userID, toolID)
 
 	if ctx.CallbackQuery != nil {
 		_, _ = ctx.CallbackQuery.Answer(b, nil)
@@ -27,8 +38,6 @@ func (h *BotHandlers) HandleToolSelect(b *gotgbot.Bot, ctx *ext.Context, toolID 
 
 	var prompt string
 	var newState session.State
-	sess := h.sm.Get(userID)
-	lang := sess.Language
 
 	switch toolID {
 	case "merge":

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -54,7 +55,6 @@ func (h *BotHandlers) EditMessage(b *gotgbot.Bot, chatID int64, messageID int64,
 	}
 	msg, _, err := b.EditMessageText(opts)
 	if err != nil {
-		// Fallback to EditMessageCaption if editing a Photo/Banner message
 		capOpts := &gotgbot.EditMessageCaptionOpts{
 			Caption:   text,
 			ChatId:    chatID,
@@ -71,10 +71,16 @@ func (h *BotHandlers) EditMessage(b *gotgbot.Bot, chatID int64, messageID int64,
 
 // HandleStart responds to /start or main menu callback
 func (h *BotHandlers) HandleStart(b *gotgbot.Bot, ctx *ext.Context) error {
-	userID := ctx.EffectiveUser.Id
-	h.sm.TrackUser(userID)
-	h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
+	u := ctx.EffectiveUser
+	userID := u.Id
+	username := ""
+	if u.Username != "" {
+		username = "@" + u.Username
+	}
+
 	sess := h.sm.Get(userID)
+	h.sm.TrackUserFull(userID, username, u.FirstName, u.LastName, sess.Language)
+	h.ClearOldMessages(b, ctx.EffectiveChat.Id, userID)
 
 	// Step 1: Prompt Language selection if first time
 	if !sess.LanguageSelected {
@@ -150,27 +156,84 @@ func (h *BotHandlers) HandleStart(b *gotgbot.Bot, ctx *ext.Context) error {
 	return err
 }
 
-// HandleStats shows analytics data to admin
+// HandleStats shows detailed analytics data to admin only
 func (h *BotHandlers) HandleStats(b *gotgbot.Bot, ctx *ext.Context) error {
-	totalUsers, activeToday, totalFiles, toolStats := h.sm.GetStats()
-
-	toolStatsText := ""
-	for tool, count := range toolStats {
-		toolStatsText += fmt.Sprintf("• `%s`: %d marta\n", tool, count)
-	}
-	if toolStatsText == "" {
-		toolStatsText = "• Hozircha uskunalar statistikasi yo'q\n"
+	userID := ctx.EffectiveUser.Id
+	if userID != 8958346579 && userID != h.cfg.AdminUserID {
+		_, err := b.SendMessage(ctx.EffectiveChat.Id, "🚫 **Ushbu buyruq faqat bot admini uchun ruxsat berilgan.**", &gotgbot.SendMessageOpts{
+			ParseMode: "Markdown",
+		})
+		return err
 	}
 
-	statsMsg := fmt.Sprintf(`📊 **iLovePDF Analitika**
+	stats := h.sm.GetDetailedStats()
 
-👥 **Foydalanuvchilar:**
-• Jami ro'yxatdan o'tganlar: **%d**
-• Bugun faol: **%d**
-• Qayta ishlangan fayllar: **%d**
+	// Language breakdown percentages
+	total := stats.TotalUsers
+	uzPct, ruPct, enPct := 0.0, 0.0, 0.0
+	if total > 0 {
+		uzPct = (float64(stats.LangCounts["uz"]) / float64(total)) * 100
+		ruPct = (float64(stats.LangCounts["ru"]) / float64(total)) * 100
+		enPct = (float64(stats.LangCounts["en"]) / float64(total)) * 100
+	}
 
-🛠 **Uskunalar statistikasi:**
-%s`, totalUsers, activeToday, totalFiles, toolStatsText)
+	// Top tools text
+	topToolsText := ""
+	limit := 5
+	if len(stats.TopTools) < limit {
+		limit = len(stats.TopTools)
+	}
+	for i := 0; i < limit; i++ {
+		t := stats.TopTools[i]
+		topToolsText += fmt.Sprintf("  %d. `%s`: **%d** marta\n", i+1, t.ToolID, t.Count)
+	}
+	if topToolsText == "" {
+		topToolsText = "  • Hozircha uskunalar statistikasi mavjud emas\n"
+	}
+
+	// Recent users text
+	recentText := ""
+	for i, u := range stats.RecentUsers {
+		name := strings.TrimSpace(u.FirstName + " " + u.LastName)
+		if name == "" {
+			name = "Foydalanuvchi"
+		}
+		userTag := u.Username
+		if userTag == "" {
+			userTag = fmt.Sprintf("ID: %d", u.UserID)
+		}
+		timeShort := u.LastActive
+		if len(timeShort) >= 16 {
+			timeShort = timeShort[11:16] + " (" + timeShort[8:10] + "-" + timeShort[5:7] + ")"
+		}
+		recentText += fmt.Sprintf("  %d. %s (%s) — `%s` | **%d** op\n", i+1, userTag, name, timeShort, u.TotalOperations)
+	}
+	if recentText == "" {
+		recentText = "  • Foydalanuvchilar ro'yxati yo'q\n"
+	}
+
+	statsMsg := fmt.Sprintf(`📊 **iLovePDF — Admin Analitika va Statistika**
+
+👥 **Foydalanuvchilar Ko'rsatkichlari:**
+• Jami ro'yxatdan o'tganlar: **%d** ta
+• Bugun faol bo'lganlar: **%d** ta
+• Bugun yangi qo'shilganlar: **%d** ta
+• Jami bajarilgan fayl operatsiyalari: **%d** ta
+
+🌐 **Tillar bo'yicha ulushi:**
+• 🇺🇿 O'zbek tili: **%d** (%0.1f%%)
+• 🇷🇺 Rus tili: **%d** (%0.1f%%)
+• 🇬🇧 Ingliz tili: **%d** (%0.1f%%)
+
+🛠 **Eng ko'p ishlatilgan Top-5 Uskunalar:**
+%s
+👥 **So'nggi faol 10 ta Foydalanuvchilar:**
+%s`,
+		stats.TotalUsers, stats.ActiveToday, stats.NewToday, stats.TotalFiles,
+		stats.LangCounts["uz"], uzPct,
+		stats.LangCounts["ru"], ruPct,
+		stats.LangCounts["en"], enPct,
+		topToolsText, recentText)
 
 	_, err := b.SendMessage(ctx.EffectiveChat.Id, statsMsg, &gotgbot.SendMessageOpts{
 		ParseMode: "Markdown",
@@ -178,23 +241,31 @@ func (h *BotHandlers) HandleStats(b *gotgbot.Bot, ctx *ext.Context) error {
 	return err
 }
 
-// HandleBroadcast sends announcement message to all users
+// HandleBroadcast sends announcement message to all users (Admin only)
 func (h *BotHandlers) HandleBroadcast(b *gotgbot.Bot, ctx *ext.Context) error {
+	userID := ctx.EffectiveUser.Id
+	if userID != 8958346579 && userID != h.cfg.AdminUserID {
+		_, err := b.SendMessage(ctx.EffectiveChat.Id, "🚫 **Ushbu buyruq faqat bot admini uchun ruxsat berilgan.**", &gotgbot.SendMessageOpts{
+			ParseMode: "Markdown",
+		})
+		return err
+	}
+
 	if len(ctx.EffectiveMessage.Text) <= 11 {
 		_, err := b.SendMessage(ctx.EffectiveChat.Id, "⚠️ **Foydalanish:** `/broadcast <xabar matni>`", &gotgbot.SendMessageOpts{ParseMode: "Markdown"})
 		return err
 	}
 
 	broadcastMsg := ctx.EffectiveMessage.Text[11:]
-	users := h.sm.GetAllUsers()
+	users := h.sm.GetAllUserIDs()
 
 	statusMsg, _ := b.SendMessage(ctx.EffectiveChat.Id, fmt.Sprintf("⏳ **Xabar %d ta foydalanuvchiga yuborilmoqda...**", len(users)), &gotgbot.SendMessageOpts{ParseMode: "Markdown"})
 
 	successCount := 0
 	failCount := 0
 
-	for _, userID := range users {
-		_, err := b.SendMessage(userID, broadcastMsg, &gotgbot.SendMessageOpts{
+	for _, targetID := range users {
+		_, err := b.SendMessage(targetID, broadcastMsg, &gotgbot.SendMessageOpts{
 			ParseMode: "Markdown",
 		})
 		if err == nil {
@@ -206,8 +277,8 @@ func (h *BotHandlers) HandleBroadcast(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	resultText := fmt.Sprintf(`✅ **Xabar tarqatish yakunlandi!**
 
-• Muvaffaqiyatli: **%d**
-• Xatolik: **%d**`, successCount, failCount)
+• Muvaffaqiyatli yetib bordi: **%d**
+• Xatolik (bloklaganlar): **%d**`, successCount, failCount)
 
 	if statusMsg != nil {
 		_, _, _ = b.EditMessageText(&gotgbot.EditMessageTextOpts{
@@ -260,8 +331,14 @@ func (h *BotHandlers) HandleLangNav(b *gotgbot.Bot, ctx *ext.Context) error {
 
 // HandleLangSelect updates user language
 func (h *BotHandlers) HandleLangSelect(b *gotgbot.Bot, ctx *ext.Context, lang string) error {
-	userID := ctx.EffectiveUser.Id
-	h.sm.SetLanguage(userID, lang)
+	u := ctx.EffectiveUser
+	h.sm.SetLanguage(u.Id, lang)
+	username := ""
+	if u.Username != "" {
+		username = "@" + u.Username
+	}
+	h.sm.TrackUserFull(u.Id, username, u.FirstName, u.LastName, lang)
+
 	if ctx.CallbackQuery != nil {
 		_, _ = ctx.CallbackQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Language updated!"})
 	}

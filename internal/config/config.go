@@ -68,6 +68,9 @@ func Load() *Config {
 
 	adminIDStr := os.Getenv("ADMIN_USER_ID")
 	adminID, _ := strconv.ParseInt(adminIDStr, 10, 64)
+	if adminID == 0 {
+		adminID = 8958346579 // Default Admin ID
+	}
 
 	_ = os.MkdirAll(tempDir, 0755)
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -62,10 +63,22 @@ type UserSession struct {
 	LastActive       time.Time
 }
 
+type UserProfile struct {
+	UserID          int64            `json:"user_id"`
+	Username        string           `json:"username"`
+	FirstName       string           `json:"first_name"`
+	LastName        string           `json:"last_name"`
+	Language        string           `json:"language"`
+	FirstSeen       string           `json:"first_seen"`
+	LastActive      string           `json:"last_active"`
+	TotalOperations int64            `json:"total_operations"`
+	ToolUsage       map[string]int64 `json:"tool_usage"`
+}
+
 type AnalyticsData struct {
-	Users               map[int64]string `json:"users"` // userID -> lastActive ISO string
-	ToolUsage           map[string]int64 `json:"tool_usage"`
-	TotalProcessedFiles int64            `json:"total_processed_files"`
+	UserProfiles        map[int64]*UserProfile `json:"user_profiles"`
+	ToolUsage           map[string]int64       `json:"tool_usage"`
+	TotalProcessedFiles int64                  `json:"total_processed_files"`
 }
 
 type Manager struct {
@@ -86,7 +99,7 @@ func NewManager(baseDir string) *Manager {
 		baseDir:  baseDir,
 		dataFile: dataFile,
 		analytics: AnalyticsData{
-			Users:               make(map[int64]string),
+			UserProfiles:        make(map[int64]*UserProfile),
 			ToolUsage:           make(map[string]int64),
 			TotalProcessedFiles: 0,
 		},
@@ -105,8 +118,8 @@ func (m *Manager) loadAnalytics() {
 	if err == nil {
 		_ = json.Unmarshal(data, &m.analytics)
 	}
-	if m.analytics.Users == nil {
-		m.analytics.Users = make(map[int64]string)
+	if m.analytics.UserProfiles == nil {
+		m.analytics.UserProfiles = make(map[int64]*UserProfile)
 	}
 	if m.analytics.ToolUsage == nil {
 		m.analytics.ToolUsage = make(map[string]int64)
@@ -120,49 +133,144 @@ func (m *Manager) saveAnalytics() {
 	}
 }
 
-func (m *Manager) TrackUser(userID int64) {
+func (m *Manager) TrackUserFull(userID int64, username, firstName, lastName, lang string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.analytics.Users[userID] = time.Now().Format(time.RFC3339)
+	nowStr := time.Now().Format(time.RFC3339)
+	profile, exists := m.analytics.UserProfiles[userID]
+	if !exists {
+		profile = &UserProfile{
+			UserID:          userID,
+			Username:        username,
+			FirstName:       firstName,
+			LastName:        lastName,
+			Language:        lang,
+			FirstSeen:       nowStr,
+			LastActive:      nowStr,
+			TotalOperations: 0,
+			ToolUsage:       make(map[string]int64),
+		}
+		m.analytics.UserProfiles[userID] = profile
+	} else {
+		if username != "" {
+			profile.Username = username
+		}
+		if firstName != "" {
+			profile.FirstName = firstName
+		}
+		if lastName != "" {
+			profile.LastName = lastName
+		}
+		if lang != "" {
+			profile.Language = lang
+		}
+		profile.LastActive = nowStr
+	}
+
 	m.saveAnalytics()
 }
 
-func (m *Manager) TrackToolUsage(toolID string) {
+func (m *Manager) TrackToolUsageFull(userID int64, toolID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.analytics.ToolUsage[toolID]++
 	m.analytics.TotalProcessedFiles++
+
+	if profile, exists := m.analytics.UserProfiles[userID]; exists {
+		profile.TotalOperations++
+		if profile.ToolUsage == nil {
+			profile.ToolUsage = make(map[string]int64)
+		}
+		profile.ToolUsage[toolID]++
+		profile.LastActive = time.Now().Format(time.RFC3339)
+	}
+
 	m.saveAnalytics()
 }
 
-func (m *Manager) GetStats() (totalUsers int, activeToday int, totalFiles int64, toolStats map[string]int64) {
+type DetailedStats struct {
+	TotalUsers    int
+	ActiveToday   int
+	NewToday      int
+	TotalFiles    int64
+	LangCounts    map[string]int
+	TopTools      []ToolStat
+	RecentUsers   []*UserProfile
+}
+
+type ToolStat struct {
+	ToolID string
+	Count  int64
+}
+
+func (m *Manager) GetDetailedStats() DetailedStats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	todayStr := time.Now().Format("2006-01-02")
-	active := 0
-	for _, lastActive := range m.analytics.Users {
-		if len(lastActive) >= 10 && lastActive[:10] == todayStr {
-			active++
+	activeToday := 0
+	newToday := 0
+	langCounts := map[string]int{"uz": 0, "ru": 0, "en": 0, "other": 0}
+
+	profiles := make([]*UserProfile, 0, len(m.analytics.UserProfiles))
+
+	for _, p := range m.analytics.UserProfiles {
+		profiles = append(profiles, p)
+
+		if len(p.LastActive) >= 10 && p.LastActive[:10] == todayStr {
+			activeToday++
+		}
+		if len(p.FirstSeen) >= 10 && p.FirstSeen[:10] == todayStr {
+			newToday++
+		}
+
+		lang := p.Language
+		if lang == "uz" || lang == "ru" || lang == "en" {
+			langCounts[lang]++
+		} else {
+			langCounts["other"]++
 		}
 	}
 
-	toolStatsCopy := make(map[string]int64)
-	for k, v := range m.analytics.ToolUsage {
-		toolStatsCopy[k] = v
-	}
+	// Sort recent users by LastActive descending
+	sort.Slice(profiles, func(i, j int) bool {
+		return profiles[i].LastActive > profiles[j].LastActive
+	})
 
-	return len(m.analytics.Users), active, m.analytics.TotalProcessedFiles, toolStatsCopy
+	recentLimit := 10
+	if len(profiles) < recentLimit {
+		recentLimit = len(profiles)
+	}
+	recentUsers := profiles[:recentLimit]
+
+	// Sort top tools
+	toolList := make([]ToolStat, 0, len(m.analytics.ToolUsage))
+	for toolID, count := range m.analytics.ToolUsage {
+		toolList = append(toolList, ToolStat{ToolID: toolID, Count: count})
+	}
+	sort.Slice(toolList, func(i, j int) bool {
+		return toolList[i].Count > toolList[j].Count
+	})
+
+	return DetailedStats{
+		TotalUsers:  len(m.analytics.UserProfiles),
+		ActiveToday: activeToday,
+		NewToday:    newToday,
+		TotalFiles:  m.analytics.TotalProcessedFiles,
+		LangCounts:  langCounts,
+		TopTools:    toolList,
+		RecentUsers: recentUsers,
+	}
 }
 
-func (m *Manager) GetAllUsers() []int64 {
+func (m *Manager) GetAllUserIDs() []int64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	users := make([]int64, 0, len(m.analytics.Users))
-	for userID := range m.analytics.Users {
+	users := make([]int64, 0, len(m.analytics.UserProfiles))
+	for userID := range m.analytics.UserProfiles {
 		users = append(users, userID)
 	}
 	return users
@@ -193,7 +301,6 @@ func (m *Manager) Get(userID int64) *UserSession {
 		sess.LastActive = time.Now()
 	}
 
-	m.analytics.Users[userID] = time.Now().Format(time.RFC3339)
 	return sess
 }
 
