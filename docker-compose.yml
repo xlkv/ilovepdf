@@ -1,0 +1,11 @@
+services:
+  ilovepdf:
+    build: .
+    container_name: ilovepdf_bot
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./data:/app/data
