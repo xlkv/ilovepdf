@@ -24,7 +24,13 @@ type Bot struct {
 }
 
 func NewBot(cfg *config.Config) (*Bot, error) {
-	b, err := gotgbot.NewBot(cfg.BotToken, nil)
+	b, err := gotgbot.NewBot(cfg.BotToken, &gotgbot.BotOpts{
+		BotClient: &gotgbot.BaseBotClient{
+			Client: http.Client{
+				Timeout: 30 * time.Second,
+			},
+		},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
