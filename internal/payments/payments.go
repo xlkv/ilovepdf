@@ -96,5 +96,5 @@ func (pm *PaymentManager) HandleClickWebhook(w http.ResponseWriter, r *http.Requ
 
 func jsonResp(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = fmt.Fprintf(w, `{"error": %v, "error_note": "%v"}`, data.(map[string]interface{})["error"], data.(map[string]interface{})["error_note"])
+	_, _ = fmt.Fprintf(w, `{"error": %v, "error_note": "%v"}`, data.(map[string]interface{})["error"], data.(map[string]interface{})["error_note"])
 }

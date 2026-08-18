@@ -158,7 +158,7 @@ func (mh *MonitorHandlers) HandleClaimFreeTrial(b *gotgbot.Bot, ctx *ext.Context
 		MessageId:   ctx.EffectiveMessage.MessageId,
 		Text:        text,
 		ParseMode:   "Markdown",
-		ReplyMarkup: &kb,
+		ReplyMarkup: kb,
 	})
 	return err
 }
@@ -186,7 +186,7 @@ Tarifni tanlang:`
 		MessageId:   ctx.EffectiveMessage.MessageId,
 		Text:        text,
 		ParseMode:   "Markdown",
-		ReplyMarkup: &kb,
+		ReplyMarkup: kb,
 	})
 	return err
 }
