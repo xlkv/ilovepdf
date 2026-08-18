@@ -54,27 +54,23 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 
 	mh := botHandlers.NewMonitorHandlers(storage, evaluator, olxScraper, filterMatcher, payMgr)
 
-	// Register Bot Commands with Telegram Menu
+	// Register Bot Commands specifically for Avto Radar (@uz_avtoradarbot)
 	_, _ = b.SetMyCommands([]gotgbot.BotCommand{
-		{Command: "start", Description: "🚀 Asosiy menyu / Main Menu"},
-		{Command: "monitor", Description: "🚗 Avto-E'lon Monitor Bot (Arzon E'lonlar)"},
-		{Command: "cancel", Description: "❌ Bekor qilish / Cancel"},
-		{Command: "lang", Description: "🌐 Tilni o'zgartirish / Language"},
-		{Command: "stats", Description: "📊 Admin statistika (Admin only)"},
+		{Command: "start", Description: "🚀 Avto Radar — Asosiy Menyu"},
+		{Command: "stats", Description: "📊 Statistika (Admin)"},
 	}, nil)
 
-	// Set Bot Description ("What can this bot do?" intro screen)
-	botDescription := `✨ iLovePDF & Avto-E'lon Monitor
+	botDescription := `🚗 Avto Radar — Bozor Narxidan Arzon E'lonlar Monitori
 
-🇺🇿 PDF fayllar bilan ishlash va Real-time Arzon Avto-E'lonlar monitori.
-🇷🇺 Удобные инструменты для работы с PDF и Мониторинг авто-объявлений.
-🇬🇧 All-in-one PDF tools and Real-time Marketplace Alert Engine.`
+⚡️ OLX va Avto.uz saytlaridagi bozor narxidan 10%-25% arzon e'lonlarni 1 soniyada topib beruvchi aqlli radar bot.
+
+🎁 Yangi foydalanuvchilar uchun 24 soatlik BEPUL VIP mavjud!`
 
 	_, _ = b.SetMyDescription(&gotgbot.SetMyDescriptionOpts{
 		Description: botDescription,
 	})
 
-	botShortDescription := "✨ Smart PDF tools & Avto-E'lon Monitor"
+	botShortDescription := "🚗 Avto Radar — Arzon E'lonlar Monitori"
 	_, _ = b.SetMyShortDescription(&gotgbot.SetMyShortDescriptionOpts{
 		ShortDescription: botShortDescription,
 	})
@@ -89,13 +85,9 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 
 	updater := ext.NewUpdater(dispatcher, nil)
 
-	// Command Handlers
-	dispatcher.AddHandler(handlers.NewCommand("start", h.HandleStart))
-	dispatcher.AddHandler(handlers.NewCommand("monitor", mh.HandleMonitorStart))
-	dispatcher.AddHandler(handlers.NewCommand("cancel", h.HandleCancel))
-	dispatcher.AddHandler(handlers.NewCommand("lang", h.HandleLangNav))
+	// Direct /start to Avto Radar Handler
+	dispatcher.AddHandler(handlers.NewCommand("start", mh.HandleMonitorStart))
 	dispatcher.AddHandler(handlers.NewCommand("stats", h.HandleStats))
-	dispatcher.AddHandler(handlers.NewCommand("broadcast", h.HandleBroadcast))
 
 	// Monitor Callback Query Handlers
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("monitor:"), func(b *gotgbot.Bot, ctx *ext.Context) error {
@@ -108,26 +100,11 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 		return mh.HandleCallbackQuery(b, ctx)
 	}))
 
-	// Callback Query Handlers for PDF
+	// Fallback PDF handlers
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Equal("action:cancel"), h.HandleCancel))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Equal("nav:lang"), h.HandleLangNav))
-	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Equal("nav:main"), h.HandleStart))
+	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Equal("nav:main"), mh.HandleMonitorStart))
 
-	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("lang:"), func(b *gotgbot.Bot, ctx *ext.Context) error {
-		lang := ctx.CallbackQuery.Data[5:]
-		return h.HandleLangSelect(b, ctx, lang)
-	}))
-
-	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("tool:"), func(b *gotgbot.Bot, ctx *ext.Context) error {
-		toolID := ctx.CallbackQuery.Data[5:]
-		return h.HandleToolSelect(b, ctx, toolID)
-	}))
-
-	dispatcher.AddHandler(handlers.NewCallback(callbackquery.All, func(b *gotgbot.Bot, ctx *ext.Context) error {
-		return h.HandleCallbackActions(b, ctx, ctx.CallbackQuery.Data)
-	}))
-
-	// File & Document Filters
 	dispatcher.AddHandler(handlers.NewMessage(message.Document, h.HandleDocumentUpload))
 	dispatcher.AddHandler(handlers.NewMessage(message.Photo, h.HandlePhotoUpload))
 	dispatcher.AddHandler(handlers.NewMessage(message.Text, h.HandleTextMessage))
@@ -142,7 +119,7 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 }
 
 func (b *Bot) Start() error {
-	log.Printf("🚀 Starting Bot Engine as @%s...", b.b.User.Username)
+	log.Printf("🚀 Starting Avto Radar Bot Engine as @%s...", b.b.User.Username)
 
 	// Start Background Marketplace Real-Time Scraper Engine
 	b.monitorH.StartBackgroundScraper(b.b)
