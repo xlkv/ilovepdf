@@ -45,6 +45,9 @@ func Load() *Config {
 	loadDotEnv()
 
 	token := os.Getenv("BOT_TOKEN")
+	if token == "" {
+		token = "8864347724:AAGFX8tBfX7SRKX6jDhX7x13Wo66P7RiMwo"
+	}
 
 	tempDir := os.Getenv("TEMP_DIR")
 	if tempDir == "" {

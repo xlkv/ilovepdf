@@ -75,7 +75,10 @@ func MainMenuKeyboard(lang string) gotgbot.InlineKeyboardMarkup {
 	return gotgbot.InlineKeyboardMarkup{
 		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
 			{
-				{Text: txtMiniApp, WebApp: &gotgbot.WebAppInfo{Url: "https://ilovepdf.xlkv.uz"}},
+				{Text: "🚗 Avto Radar — Bozor Narxidan Arzon E'lonlar", CallbackData: "monitor:main"},
+			},
+			{
+				{Text: txtMiniApp, WebApp: &gotgbot.WebAppInfo{Url: "https://xlkv.me/ilovepdf/"}},
 			},
 			{
 				{Text: txtMerge, CallbackData: "tool:merge"},
