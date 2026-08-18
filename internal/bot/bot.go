@@ -44,17 +44,21 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 	}, nil)
 
 	// Set Bot Description
-	botDescription := `✨ iLovePDF — Smart PDF Tools
+	botDescription := `✨ iLovePDF — Smart PDF Tools & Converter
 
-🇺🇿 PDF fayllar bilan ishlash va konvertatsiya qilish.
-🇷🇺 Удобные инструменты для работы и конвертации PDF.
-🇬🇧 All-in-one PDF tools and converter.`
+🇺🇿 PDF fayllarni birlashtirish, ajratish, siqish, Word/Excel/PPT/JPG ga va orqaga konvertatsiya qilish uchun eng qulay va tezkor bot.
+
+📱 Visual Editor: https://xlkv.me/ilovepdf/
+
+---
+🇷🇺 Удобный и быстрый бот для объединения, сжатия, конвертации PDF (Word, Excel, PPT, JPG).
+🇬🇧 Ultimate PDF utility bot for merging, splitting, compressing, and converting PDF files.`
 
 	_, _ = b.SetMyDescription(&gotgbot.SetMyDescriptionOpts{
 		Description: botDescription,
 	})
 
-	botShortDescription := "✨ Smart PDF tools / PDF fayllar boti"
+	botShortDescription := "✨ Smart PDF tools, converter & editor"
 	_, _ = b.SetMyShortDescription(&gotgbot.SetMyShortDescriptionOpts{
 		ShortDescription: botShortDescription,
 	})
